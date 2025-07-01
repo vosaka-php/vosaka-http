@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace vosaka\http\server;
+namespace vosaka\http\router;
 
 use Closure;
 
@@ -18,5 +18,6 @@ final class RouteDefinition
         public array $middleware,
         public CompiledRoute $compiled,
         public ?string $name = null
-    ) {}
+    ) {
+    }
 }

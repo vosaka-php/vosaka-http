@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace vosaka\http\server;
+namespace vosaka\http\router;
 
 use Closure;
 use Psr\Http\Message\ResponseInterface;

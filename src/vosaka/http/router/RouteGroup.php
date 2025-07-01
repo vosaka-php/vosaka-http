@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace vosaka\http\server;
+namespace vosaka\http\router;
 
 use Closure;
 use vosaka\http\middleware\MiddlewareInterface;
@@ -15,7 +15,8 @@ class RouteGroup
     public function __construct(
         private Router $router,
         private string $prefix
-    ) {}
+    ) {
+    }
 
     public function get(
         string $pattern,

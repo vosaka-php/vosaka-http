@@ -10,9 +10,9 @@ namespace vosaka\http\server;
 class ServerConfig
 {
     public function __construct(
-        public readonly int $maxRequestSize = 65536,
-        public readonly int $keepAliveTimeout = 30,
-        public readonly int $requestTimeout = 30,
+        public readonly int $maxRequestSize = 1048576, // 1MB for larger requests
+        public readonly int $keepAliveTimeout = 3, // Shorter timeout for high throughput
+        public readonly int $requestTimeout = 3, // Shorter timeout
         public readonly bool $debug = false
     ) {}
 }

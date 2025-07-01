@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace vosaka\http\middleware;
 
+use Generator;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -22,5 +23,8 @@ interface MiddlewareInterface
      * @param callable $next The next middleware/handler in the chain
      * @return ResponseInterface|null Return a response to short-circuit, or null to continue
      */
-    public function process(ServerRequestInterface $request, callable $next): ?ResponseInterface;
+    public function process(
+        ServerRequestInterface $request,
+        callable $next
+    ): ?ResponseInterface;
 }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace vosaka\http\server;
+namespace vosaka\http\router;
 
 /**
  * Compiled route pattern for efficient matching
@@ -14,7 +14,9 @@ readonly class CompiledRoute
         public array $params,
         public array $constraints = [],
         public bool $hasWildcard = false
-    ) {}
+    ) {
+        // TODO: You might want to validate the regex pattern here
+    }
 
     /**
      * Get parameter names

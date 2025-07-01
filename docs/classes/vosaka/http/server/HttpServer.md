@@ -50,7 +50,7 @@ private bool $running
 
 
 ```php
-private \vosaka\http\server\Router $router
+private \vosaka\http\router\Router $router
 ```
 
 
@@ -75,42 +75,12 @@ private \vosaka\http\middleware\MiddlewareStack $middlewareStack
 
 ***
 
-### errorHandler
+### errorHandlers
 
 
 
 ```php
-private ?\Closure $errorHandler
-```
-
-
-
-
-
-
-***
-
-### notFoundHandler
-
-
-
-```php
-private ?\Closure $notFoundHandler
-```
-
-
-
-
-
-
-***
-
-### methodNotAllowedHandler
-
-
-
-```php
-private ?\Closure $methodNotAllowedHandler
+private \vosaka\http\server\ErrorHandlerManager $errorHandlers
 ```
 
 
@@ -150,6 +120,66 @@ private bool $debugMode
 
 ***
 
+### requestParser
+
+
+
+```php
+private \vosaka\http\server\HttpRequestParser $requestParser
+```
+
+
+
+
+
+
+***
+
+### responseWriter
+
+
+
+```php
+private \vosaka\http\server\HttpResponseWriter $responseWriter
+```
+
+
+
+
+
+
+***
+
+### requestProcessor
+
+
+
+```php
+private \vosaka\http\server\RequestProcessor $requestProcessor
+```
+
+
+
+
+
+
+***
+
+### debugHelper
+
+
+
+```php
+private \vosaka\http\server\ServerDebugHelper $debugHelper
+```
+
+
+
+
+
+
+***
+
 ## Methods
 
 
@@ -158,7 +188,7 @@ private bool $debugMode
 
 
 ```php
-public __construct(\vosaka\http\server\Router $router, ?\vosaka\http\server\ServerConfig $config = null): mixed
+public __construct(\vosaka\http\router\Router $router, ?\vosaka\http\server\ServerConfig $config = null): mixed
 ```
 
 
@@ -172,7 +202,7 @@ public __construct(\vosaka\http\server\Router $router, ?\vosaka\http\server\Serv
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$router` | **\vosaka\http\server\Router** |  |
+| `$router` | **\vosaka\http\router\Router** |  |
 | `$config` | **?\vosaka\http\server\ServerConfig** |  |
 
 
@@ -186,7 +216,7 @@ public __construct(\vosaka\http\server\Router $router, ?\vosaka\http\server\Serv
 
 
 ```php
-public static new(\vosaka\http\server\Router $router, ?\vosaka\http\server\ServerConfig $config = null): self
+public static new(\vosaka\http\router\Router $router, ?\vosaka\http\server\ServerConfig $config = null): self
 ```
 
 
@@ -200,7 +230,7 @@ public static new(\vosaka\http\server\Router $router, ?\vosaka\http\server\Serve
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$router` | **\vosaka\http\server\Router** |  |
+| `$router` | **\vosaka\http\router\Router** |  |
 | `$config` | **?\vosaka\http\server\ServerConfig** |  |
 
 
@@ -211,7 +241,7 @@ public static new(\vosaka\http\server\Router $router, ?\vosaka\http\server\Serve
 
 ### bind
 
-Create a server builder for fluent API
+
 
 ```php
 public bind(string $address): \vosaka\http\server\ServerBuilder
@@ -346,7 +376,7 @@ public withDebugMode(bool $debug = true): self
 
 ### layer
 
-Add server-level middleware (runs before router)
+
 
 ```php
 public layer(\vosaka\http\middleware\MiddlewareInterface|\Closure $middleware): self
@@ -373,7 +403,7 @@ public layer(\vosaka\http\middleware\MiddlewareInterface|\Closure $middleware): 
 
 ### serve
 
-Start the server on the given address
+
 
 ```php
 public serve(string $address, array $options = []): \venndev\vosaka\core\Result
@@ -440,579 +470,6 @@ private handleConnection(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### processRequest
-
-Enhanced request processing with proper Router integration
-
-```php
-private processRequest(\Psr\Http\Message\ServerRequestInterface $request): \Generator
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-
-
-
-
-
-***
-
-### findAllowedMethods
-
-Find allowed methods for a path (for 405 responses)
-
-```php
-private findAllowedMethods(\Psr\Http\Message\ServerRequestInterface $request): array
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-
-
-
-
-
-***
-
-### enrichRequestWithRouteData
-
-Enrich request with route matching data
-
-```php
-private enrichRequestWithRouteData(\Psr\Http\Message\ServerRequestInterface $request, \vosaka\http\server\RouteMatch $match): \Psr\Http\Message\ServerRequestInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-| `$match` | **\vosaka\http\server\RouteMatch** |  |
-
-
-
-
-
-***
-
-### printRouteTable
-
-Debug: Print route table on startup
-
-```php
-private printRouteTable(): void
-```
-
-
-
-
-
-
-
-
-
-
-
-
-***
-
-### logRouteMatch
-
-Debug: Log route matches
-
-```php
-private logRouteMatch(\Psr\Http\Message\ServerRequestInterface $request, \vosaka\http\server\RouteMatch $match): void
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-| `$match` | **\vosaka\http\server\RouteMatch** |  |
-
-
-
-
-
-***
-
-### defaultNotFoundHandler
-
-
-
-```php
-private defaultNotFoundHandler(\Psr\Http\Message\ServerRequestInterface $request): \Psr\Http\Message\ResponseInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-
-
-
-
-
-***
-
-### defaultMethodNotAllowedHandler
-
-
-
-```php
-private defaultMethodNotAllowedHandler(\Psr\Http\Message\ServerRequestInterface $request, array $allowedMethods): \Psr\Http\Message\ResponseInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-| `$allowedMethods` | **array** |  |
-
-
-
-
-
-***
-
-### defaultErrorHandler
-
-
-
-```php
-private defaultErrorHandler(\Throwable $error, ?\Psr\Http\Message\ServerRequestInterface $request = null): \Psr\Http\Message\ResponseInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$error` | **\Throwable** |  |
-| `$request` | **?\Psr\Http\Message\ServerRequestInterface** |  |
-
-
-
-
-
-***
-
-### parseRequest
-
-
-
-```php
-private parseRequest(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### parseRequestLine
-
-
-
-```php
-private parseRequestLine(string $line): ?array
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$line` | **string** |  |
-
-
-
-
-
-***
-
-### parseHeaders
-
-
-
-```php
-private parseHeaders(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### parseBody
-
-
-
-```php
-private parseBody(\venndev\vosaka\net\tcp\TCPStream $client, array $headers): \Generator
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-| `$headers` | **array** |  |
-
-
-
-
-
-***
-
-### buildServerParams
-
-
-
-```php
-private buildServerParams(string $method, string $target, string $version, \venndev\vosaka\net\tcp\TCPStream $client): array
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$method` | **string** |  |
-| `$target` | **string** |  |
-| `$version` | **string** |  |
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### enrichRequest
-
-
-
-```php
-private enrichRequest(\Psr\Http\Message\ServerRequestInterface $request, \vosaka\http\message\Uri $uri, string $body): \Psr\Http\Message\ServerRequestInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-| `$uri` | **\vosaka\http\message\Uri** |  |
-| `$body` | **string** |  |
-
-
-
-
-
-***
-
-### sendResponse
-
-
-
-```php
-private sendResponse(\venndev\vosaka\net\tcp\TCPStream $client, \Psr\Http\Message\ResponseInterface $response): \Generator
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-| `$response` | **\Psr\Http\Message\ResponseInterface** |  |
-
-
-
-
-
-***
-
-### buildResponseHeaders
-
-
-
-```php
-private buildResponseHeaders(\Psr\Http\Message\ResponseInterface $response): string
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$response` | **\Psr\Http\Message\ResponseInterface** |  |
-
-
-
-
-
-***
-
-### getResponseBody
-
-
-
-```php
-private getResponseBody(\Psr\Http\Message\ResponseInterface $response): string
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$response` | **\Psr\Http\Message\ResponseInterface** |  |
-
-
-
-
-
-***
-
-### convertToResponse
-
-
-
-```php
-private convertToResponse(mixed $result): \Psr\Http\Message\ResponseInterface
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$result` | **mixed** |  |
-
-
-
-
-
-***
-
-### parseUri
-
-
-
-```php
-private parseUri(string $target): \vosaka\http\message\Uri
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$target` | **string** |  |
-
-
-
-
-
-***
-
-### isFormData
-
-
-
-```php
-private isFormData(\Psr\Http\Message\ServerRequestInterface $request): bool
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-
-
-
-
-
-***
-
-### shouldKeepAlive
-
-
-
-```php
-private shouldKeepAlive(\Psr\Http\Message\ServerRequestInterface $request, \Psr\Http\Message\ResponseInterface $response): bool
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\ServerRequestInterface** |  |
-| `$response` | **\Psr\Http\Message\ResponseInterface** |  |
 
 
 

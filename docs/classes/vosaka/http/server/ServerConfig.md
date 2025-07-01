@@ -81,7 +81,7 @@ public bool $debug
 
 
 ```php
-public __construct(int $maxRequestSize = 65536, int $keepAliveTimeout = 30, int $requestTimeout = 30, bool $debug = false): mixed
+public __construct(int $maxRequestSize = 1048576, int $keepAliveTimeout = 3, int $requestTimeout = 3, bool $debug = false): mixed
 ```
 
 

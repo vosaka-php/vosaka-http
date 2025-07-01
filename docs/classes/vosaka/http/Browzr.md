@@ -67,7 +67,7 @@ public static client(array $options = []): \vosaka\http\client\HttpClient
 
 
 ```php
-public static server(\vosaka\http\server\Router $router, ?\vosaka\http\server\ServerConfig $config = null): mixed
+public static server(\vosaka\http\router\Router $router, ?\vosaka\http\server\ServerConfig $config = null): mixed
 ```
 
 
@@ -81,7 +81,7 @@ public static server(\vosaka\http\server\Router $router, ?\vosaka\http\server\Se
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$router` | **\vosaka\http\server\Router** |  |
+| `$router` | **\vosaka\http\router\Router** |  |
 | `$config` | **?\vosaka\http\server\ServerConfig** |  |
 
 

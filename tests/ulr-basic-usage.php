@@ -4,7 +4,7 @@ require_once "../vendor/autoload.php";
 
 use venndev\vosaka\VOsaka;
 use vosaka\http\Browzr;
-use vosaka\http\server\Router;
+use vosaka\http\router\Router;
 use vosaka\http\middleware\CorsMiddleware;
 use vosaka\http\middleware\RateLimitMiddleware;
 

@@ -15,7 +15,7 @@ use vosaka\http\message\Uri;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use vosaka\http\server\Router;
+use vosaka\http\router\Router;
 use vosaka\http\server\ServerConfig;
 
 /**
