@@ -118,7 +118,7 @@ final class HttpServer
                     yield;
                 } catch (Throwable $e) {
                     if ($this->running) {
-                        echo "❌ Error accepting connection: {$e->getMessage()}\n";
+                        echo "Error accepting connection: {$e->getMessage()}\n";
                     }
                     break;
                 }
@@ -211,8 +211,8 @@ final class HttpServer
             return ($this->errorHandler)($e, $request);
         } catch (Throwable $e) {
             if ($this->debugMode) {
-                echo "❌ Unhandled error: {$e->getMessage()}\n";
-                echo "   File: {$e->getFile()}:{$e->getLine()}\n";
+                echo "Unhandled error: {$e->getMessage()}\n";
+                echo "File: {$e->getFile()}:{$e->getLine()}\n";
             }
             return ($this->errorHandler)($e, $request);
         }
