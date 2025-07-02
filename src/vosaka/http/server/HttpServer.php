@@ -7,6 +7,7 @@ namespace vosaka\http\server;
 use Throwable;
 use Generator;
 use Closure;
+use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
 use venndev\vosaka\VOsaka;
 use venndev\vosaka\net\tcp\TCPListener;
@@ -130,7 +131,7 @@ final class HttpServer
             }
         };
 
-        return Result::c($fn());
+        return Future::new($fn());
     }
 
     public function shutdown(): void
@@ -157,7 +158,10 @@ final class HttpServer
                     $response
                 );
 
-                $keepAlive = $this->responseWriter->shouldKeepAlive($request, $response);
+                $keepAlive = $this->responseWriter->shouldKeepAlive(
+                    $request,
+                    $response
+                );
             }
         } catch (Throwable $e) {
             try {

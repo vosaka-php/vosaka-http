@@ -16,6 +16,7 @@ use vosaka\http\message\Stream;
 use vosaka\http\message\Uri;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use venndev\vosaka\core\Future;
 
 /**
  * Asynchronous HTTP Client using VOsaka runtime.
@@ -98,7 +99,7 @@ final class HttpClient
                 throw new RuntimeException("No response received");
         };
 
-        return Result::c($fn());
+        return Future::new($fn());
     }
 
     /**
@@ -232,7 +233,7 @@ final class HttpClient
             }
         };
 
-        return Result::c($fn());
+        return Future::new($fn());
     }
 
     private function buildHttpRequest(
@@ -366,7 +367,7 @@ final class HttpClient
             );
         };
 
-        return Result::c($fn());
+        return Future::new($fn());
     }
 
     private function readChunkedBody(TCPStream $stream): Result
@@ -400,7 +401,7 @@ final class HttpClient
             return $body;
         };
 
-        return Result::c($fn());
+        return Future::new($fn());
     }
 
     private function getDefaultHeaders(array $options): array

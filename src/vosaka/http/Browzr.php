@@ -53,8 +53,6 @@ final class Browzr
         return self::$defaultClient;
     }
 
-    // ===== Client Methods =====
-
     /**
      * Send a GET request asynchronously.
      */
@@ -242,8 +240,6 @@ final class Browzr
         return Stream::createFromResource($resource);
     }
 
-    // ===== Response Convenience Methods =====
-
     /**
      * Create a JSON response.
      */
@@ -359,8 +355,6 @@ final class Browzr
         return new Response(429, $headers, $message);
     }
 
-    // ===== Utility Methods =====
-
     /**
      * Set the default HTTP client.
      */
@@ -375,18 +369,5 @@ final class Browzr
     public static function resetDefaultClient(): void
     {
         self::$defaultClient = null;
-    }
-
-    /**
-     * Get library version information.
-     */
-    public static function version(): array
-    {
-        return [
-            "name" => "VOsaka HTTP",
-            "version" => "1.0.0",
-            "description" =>
-                "Asynchronous HTTP library for PHP using VOsaka runtime",
-        ];
     }
 }
