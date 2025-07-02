@@ -29,7 +29,7 @@ final class HttpClient
     private array $defaultOptions = [
         "timeout" => 30,
         "follow_redirects" => true,
-        "max_redirects" => 5,
+        "max_redirects" => 1,
         "ssl_verify" => true,
         "user_agent" => "VOsaka-HTTP/1.0",
         "headers" => [],
