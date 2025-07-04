@@ -6,7 +6,10 @@ namespace vosaka\http\client;
 
 use Generator;
 use InvalidArgumentException;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
+use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
 use venndev\vosaka\net\tcp\TCP;
 use venndev\vosaka\net\tcp\TCPStream;
@@ -14,9 +17,6 @@ use vosaka\http\message\Request;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
 use vosaka\http\message\Uri;
-use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
-use venndev\vosaka\core\Future;
 
 /**
  * Asynchronous HTTP Client using VOsaka runtime.
@@ -220,7 +220,7 @@ final class HttpClient
             try {
                 // Send request
                 $requestData = $this->buildHttpRequest($request, $options);
-                yield from $stream->writeAll($requestData)->unwrap();
+                yield from $stream->write($requestData)->unwrap();
 
                 // Read response
                 $response = yield from $this->readHttpResponse(
@@ -254,10 +254,10 @@ final class HttpClient
         );
 
         // Ensure Host header is set
-        if (!$request->hasHeader("Host")) {
+        if (! $request->hasHeader("Host")) {
             $host = $uri->getHost();
             if ($uri->getPort() !== null) {
-                $host .= ":" . $uri->getPort();
+                $host .= ":".$uri->getPort();
             }
             $headers["Host"] = [$host];
         }
@@ -297,7 +297,7 @@ final class HttpClient
             }
 
             if (
-                !preg_match(
+                ! preg_match(
                     '/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/',
                     $statusLine,
                     $matches
@@ -318,7 +318,7 @@ final class HttpClient
                     break;
                 }
 
-                if (!str_contains($line, ":")) {
+                if (! str_contains($line, ":")) {
                     continue;
                 }
 
@@ -326,7 +326,7 @@ final class HttpClient
                 $name = trim($name);
                 $value = trim($value);
 
-                if (!isset($headers[$name])) {
+                if (! isset($headers[$name])) {
                     $headers[$name] = [];
                 }
                 $headers[$name][] = $value;
@@ -428,7 +428,7 @@ final class HttpClient
 
         if (is_array($body)) {
             $json = json_encode($body, JSON_THROW_ON_ERROR);
-            if (!isset($headers["Content-Type"])) {
+            if (! isset($headers["Content-Type"])) {
                 $headers["Content-Type"] = "application/json";
             }
             return Stream::create($json);
@@ -444,7 +444,7 @@ final class HttpClient
     private function validateUri($uri): void
     {
         $scheme = $uri->getScheme();
-        if (!in_array($scheme, ["http", "https"], true)) {
+        if (! in_array($scheme, ["http", "https"], true)) {
             throw new InvalidArgumentException(
                 "Only HTTP and HTTPS URLs are supported"
             );

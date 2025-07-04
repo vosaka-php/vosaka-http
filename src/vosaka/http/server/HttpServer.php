@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace vosaka\http\server;
 
-use Throwable;
-use Generator;
 use Closure;
+use Generator;
+use Throwable;
 use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
-use venndev\vosaka\VOsaka;
 use venndev\vosaka\net\tcp\TCPListener;
 use venndev\vosaka\net\tcp\TCPStream;
+use venndev\vosaka\VOsaka;
 use vosaka\http\middleware\MiddlewareInterface;
 use vosaka\http\middleware\MiddlewareStack;
 use vosaka\http\router\Router;
@@ -118,7 +118,7 @@ final class HttpServer
             while ($this->running) {
                 try {
                     $client = yield from $this->listener->accept()->unwrap();
-                    if ($client !== null && !$client->isClosed()) {
+                    if ($client !== null && ! $client->isClosed()) {
                         VOsaka::spawn($this->handleConnection($client));
                     }
                     yield;
@@ -144,7 +144,7 @@ final class HttpServer
     {
         try {
             $keepAlive = true;
-            while ($keepAlive && !$client->isClosed()) {
+            while ($keepAlive && ! $client->isClosed()) {
                 $request = yield from $this->requestParser->parseRequest(
                     $client
                 );
@@ -162,6 +162,8 @@ final class HttpServer
                     $request,
                     $response
                 );
+
+                yield from $client->flush()->unwrap();
             }
         } catch (Throwable $e) {
             try {

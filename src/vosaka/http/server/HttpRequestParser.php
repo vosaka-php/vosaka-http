@@ -60,18 +60,18 @@ final class HttpRequestParser
     private function parseRequestLine(string $line): ?array
     {
         // Fast path for common case - avoid regex
-        $parts = explode(' ', $line, 3);
+        $parts = explode(" ", $line, 3);
         if (count($parts) !== 3) {
             return null;
         }
-        
+
         [$method, $uri, $version] = $parts;
-        
+
         // Quick validation
-        if (!ctype_alpha($method) || !str_starts_with($version, 'HTTP/')) {
+        if (!ctype_alpha($method) || !str_starts_with($version, "HTTP/")) {
             return null;
         }
-        
+
         return [$method, $uri, substr($version, 5)]; // Remove 'HTTP/' prefix
     }
 
@@ -84,7 +84,7 @@ final class HttpRequestParser
                 break;
             }
 
-            $colonPos = strpos($line, ':');
+            $colonPos = strpos($line, ":");
             if ($colonPos !== false) {
                 $name = strtolower(trim(substr($line, 0, $colonPos)));
                 $value = trim(substr($line, $colonPos + 1));
@@ -120,7 +120,7 @@ final class HttpRequestParser
         static $time = null;
         static $timeFloat = null;
         static $lastUpdate = 0;
-        
+
         // Update time every second only
         $now = time();
         if ($time === null || $now > $lastUpdate) {
@@ -128,7 +128,7 @@ final class HttpRequestParser
             $timeFloat = microtime(true);
             $lastUpdate = $now;
         }
-        
+
         return [
             "REQUEST_METHOD" => $method,
             "REQUEST_URI" => $target,
@@ -142,7 +142,7 @@ final class HttpRequestParser
     private function parseUri(string $target): Uri
     {
         // Fast path for relative URIs (most common case)
-        if ($target[0] === '/') {
+        if ($target[0] === "/") {
             return new Uri("http://localhost$target");
         }
         return new Uri($target);
@@ -154,7 +154,7 @@ final class HttpRequestParser
         string $body
     ): ServerRequestInterface {
         $query = $uri->getQuery();
-        if ($query !== '') {
+        if ($query !== "") {
             $queryParams = [];
             parse_str($query, $queryParams);
             $request = $request->withQueryParams($queryParams);
@@ -167,7 +167,7 @@ final class HttpRequestParser
         }
 
         // Only parse body for POST/PUT/PATCH requests with form data
-        if ($body !== '' && $this->isFormData($request)) {
+        if ($body !== "" && $this->isFormData($request)) {
             $parsedBody = [];
             parse_str($body, $parsedBody);
             $request = $request->withParsedBody($parsedBody);

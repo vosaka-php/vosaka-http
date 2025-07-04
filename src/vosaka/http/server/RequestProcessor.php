@@ -39,12 +39,10 @@ final class RequestProcessor
         ServerRequestInterface $request
     ): ResponseInterface {
         try {
-            // Use router's handle method directly which includes caching
             $response = $this->middlewareStack->build(
                 fn(ServerRequestInterface $req) => $this->router->handle($req)
             )($request);
 
-            // Handle generator responses from middleware/router
             if ($response instanceof Generator) {
                 $finalResponse = null;
                 foreach ($response as $value) {
@@ -57,7 +55,6 @@ final class RequestProcessor
                 ? $response
                 : $this->convertToResponse($response);
         } catch (HttpException $e) {
-            // Handle 404 and 405 errors
             if ($e->getCode() === 404) {
                 $allowedMethods = $this->findAllowedMethods($request);
                 if (!empty($allowedMethods)) {

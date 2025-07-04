@@ -17,15 +17,15 @@ final class HttpResponseWriter
     ): Generator {
         // Pre-build common status lines for performance
         static $statusLines = [
-            200 => "HTTP/1.1 200 OK\r\n",
-            201 => "HTTP/1.1 201 Created\r\n",
-            204 => "HTTP/1.1 204 No Content\r\n",
-            400 => "HTTP/1.1 400 Bad Request\r\n",
-            401 => "HTTP/1.1 401 Unauthorized\r\n",
-            403 => "HTTP/1.1 403 Forbidden\r\n",
-            404 => "HTTP/1.1 404 Not Found\r\n",
-            405 => "HTTP/1.1 405 Method Not Allowed\r\n",
-            500 => "HTTP/1.1 500 Internal Server Error\r\n",
+        200 => "HTTP/1.1 200 OK\r\n",
+        201 => "HTTP/1.1 201 Created\r\n",
+        204 => "HTTP/1.1 204 No Content\r\n",
+        400 => "HTTP/1.1 400 Bad Request\r\n",
+        401 => "HTTP/1.1 401 Unauthorized\r\n",
+        403 => "HTTP/1.1 403 Forbidden\r\n",
+        404 => "HTTP/1.1 404 Not Found\r\n",
+        405 => "HTTP/1.1 405 Method Not Allowed\r\n",
+        500 => "HTTP/1.1 500 Internal Server Error\r\n",
         ];
 
         $statusCode = $response->getStatusCode();
@@ -38,11 +38,23 @@ final class HttpResponseWriter
                 $response->getReasonPhrase()
             );
 
-        $headers = $this->buildResponseHeaders($response);
         $body = $this->getResponseBody($response);
+        $bodyLength = strlen($body);
 
-        // Build complete response in one go
-        $httpResponse = $statusLine . $headers . "\r\n" . $body;
+        if (! $response->hasHeader("Content-Length")) {
+            $response = $response->withHeader(
+                "Content-Length",
+                (string) $bodyLength
+            );
+        }
+
+        $headers = $this->buildResponseHeaders($response);
+        if (! str_ends_with($headers, "\r\n")) {
+            $headers .= "\r\n";
+        }
+
+        $httpResponse = "$statusLine$headers\r\n$body\r\n";
+
         yield from $client->write($httpResponse)->unwrap();
     }
 
@@ -55,7 +67,7 @@ final class HttpResponseWriter
         // Cache date header for 1 second (HTTP standard allows this)
         $now = time();
         if ($dateCache === null || $now > $dateCacheTime) {
-            $dateCache = "Date: " . gmdate("D, d M Y H:i:s T");
+            $dateCache = "Date: ".gmdate("D, d M Y H:i:s T");
             $dateCacheTime = $now;
         }
 
@@ -82,19 +94,19 @@ final class HttpResponseWriter
         }
 
         $body = $response->getBody();
-        if (!$hasContentLength && $body->getSize() !== null) {
-            $headerLines[] = "Content-Length: " . $body->getSize();
+        if (! $hasContentLength && $body->getSize() !== null) {
+            $headerLines[] = "Content-Length: ".$body->getSize();
         }
 
-        if (!$hasServer) {
+        if (! $hasServer) {
             $headerLines[] = $serverHeader;
         }
 
-        if (!$hasDate) {
+        if (! $hasDate) {
             $headerLines[] = $dateCache;
         }
 
-        return implode("\r\n", $headerLines) . "\r\n";
+        return implode("\r\n", $headerLines)."\r\n";
     }
 
     private function getResponseBody(ResponseInterface $response): string
@@ -115,8 +127,8 @@ final class HttpResponseWriter
         ResponseInterface $response
     ): bool {
         $connection = strtolower($request->getHeaderLine("Connection"));
-        return (!in_array($connection, ["close", ""]) &&
-            !$response->hasHeader("Connection")) ||
+        return (! in_array($connection, ["close", ""]) &&
+            ! $response->hasHeader("Connection")) ||
             strtolower($response->getHeaderLine("Connection")) !== "close";
     }
 }
