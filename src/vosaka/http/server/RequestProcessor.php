@@ -12,6 +12,7 @@ use vosaka\http\exceptions\HttpException;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
 use vosaka\http\middleware\MiddlewareStack;
+use vosaka\http\router\RouteDefinition;
 use vosaka\http\router\RouteMatch;
 use vosaka\http\router\Router;
 
@@ -83,7 +84,10 @@ final class RequestProcessor
         $path = $request->getUri()->getPath();
 
         foreach ($this->router->getRoutes() as $route) {
-            if (preg_match($route->compiled, $path)) {
+            /**
+             * @var RouteDefinition $route
+             */
+            if (preg_match($route->compiled->getRegex(), $path)) {
                 $allowedMethods[] = $route->method;
             }
         }

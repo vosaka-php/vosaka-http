@@ -27,14 +27,16 @@ final class HttpResponseWriter
             405 => "HTTP/1.1 405 Method Not Allowed\r\n",
             500 => "HTTP/1.1 500 Internal Server Error\r\n",
         ];
-        
+
         $statusCode = $response->getStatusCode();
-        $statusLine = $statusLines[$statusCode] ?? sprintf(
-            "HTTP/%s %d %s\r\n",
-            $response->getProtocolVersion(),
-            $statusCode,
-            $response->getReasonPhrase()
-        );
+        $statusLine =
+            $statusLines[$statusCode] ??
+            sprintf(
+                "HTTP/%s %d %s\r\n",
+                $response->getProtocolVersion(),
+                $statusCode,
+                $response->getReasonPhrase()
+            );
 
         $headers = $this->buildResponseHeaders($response);
         $body = $this->getResponseBody($response);
@@ -49,25 +51,31 @@ final class HttpResponseWriter
         static $serverHeader = "Server: VOsaka-HTTP/2.0";
         static $dateCache = null;
         static $dateCacheTime = 0;
-        
+
         // Cache date header for 1 second (HTTP standard allows this)
         $now = time();
         if ($dateCache === null || $now > $dateCacheTime) {
             $dateCache = "Date: " . gmdate("D, d M Y H:i:s T");
             $dateCacheTime = $now;
         }
-        
+
         $headerLines = [];
         $hasServer = false;
         $hasDate = false;
         $hasContentLength = false;
 
         foreach ($response->getHeaders() as $name => $values) {
-            $lowerName = strtolower($name);
-            if ($lowerName === 'server') $hasServer = true;
-            if ($lowerName === 'date') $hasDate = true;
-            if ($lowerName === 'content-length') $hasContentLength = true;
-            
+            $lowerName = strtolower((string) $name);
+            if ($lowerName === "server") {
+                $hasServer = true;
+            }
+            if ($lowerName === "date") {
+                $hasDate = true;
+            }
+            if ($lowerName === "content-length") {
+                $hasContentLength = true;
+            }
+
             foreach ($values as $value) {
                 $headerLines[] = "$name: $value";
             }
@@ -93,11 +101,11 @@ final class HttpResponseWriter
     {
         $body = $response->getBody();
         $size = $body->getSize();
-        
+
         if ($size === null || $size === 0) {
             return "";
         }
-        
+
         $body->rewind();
         return $body->getContents();
     }

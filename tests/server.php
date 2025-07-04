@@ -6,6 +6,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use venndev\vosaka\VOsaka;
 use vosaka\http\message\Response;
 use vosaka\http\middleware\CorsMiddleware;
+use vosaka\http\middleware\FaviconMiddleware;
 use vosaka\http\router\Router;
 use vosaka\http\server\HttpServer;
 
@@ -64,7 +65,8 @@ $router = Router::new()
 
 $server = HttpServer::new($router)
     ->withDebugMode(true)
-    ->layer(CorsMiddleware::permissive());
+    ->layer(CorsMiddleware::permissive())
+    ->layer(FaviconMiddleware::noContent());
 
 echo "Starting server on 0.0.0.0:8888...\n";
 
