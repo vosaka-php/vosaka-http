@@ -61,16 +61,16 @@
         },
         {
             "name": "venndev/v-osaka",
-            "version": "1.6.1",
+            "version": "1.6.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/vosaka-php/vosaka.git",
-                "reference": "6c992598e078ed30137dd1b9ff4ca3e48a8318de"
+                "reference": "84bfa5888d7549cacb381505198925b6b88f1265"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vosaka-php/vosaka/zipball/6c992598e078ed30137dd1b9ff4ca3e48a8318de",
-                "reference": "6c992598e078ed30137dd1b9ff4ca3e48a8318de",
+                "url": "https://api.github.com/repos/vosaka-php/vosaka/zipball/84bfa5888d7549cacb381505198925b6b88f1265",
+                "reference": "84bfa5888d7549cacb381505198925b6b88f1265",
                 "shasum": ""
             },
             "type": "library",
@@ -92,9 +92,9 @@
             "description": "A library for php async, ..",
             "support": {
                 "issues": "https://github.com/vosaka-php/vosaka/issues",
-                "source": "https://github.com/vosaka-php/vosaka/tree/1.6.1"
+                "source": "https://github.com/vosaka-php/vosaka/tree/1.6.2"
             },
-            "time": "2025-07-05T07:40:46+00:00"
+            "time": "2025-07-05T18:05:13+00:00"
         }
     ],
     "packages-dev": [],
