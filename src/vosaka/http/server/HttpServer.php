@@ -118,7 +118,7 @@ final class HttpServer
             while ($this->running) {
                 try {
                     $client = yield from $this->listener->accept()->unwrap();
-                    if ($client !== null && ! $client->isClosed()) {
+                    if ($client !== null && !$client->isClosed()) {
                         VOsaka::spawn($this->handleConnection($client));
                     }
                     yield;
@@ -144,7 +144,7 @@ final class HttpServer
     {
         try {
             $keepAlive = true;
-            while ($keepAlive && ! $client->isClosed()) {
+            while ($keepAlive && !$client->isClosed()) {
                 $request = yield from $this->requestParser->parseRequest(
                     $client
                 );
@@ -166,6 +166,7 @@ final class HttpServer
                 yield from $client->flush()->unwrap();
             }
         } catch (Throwable $e) {
+            var_dump($e->getMessage());
             try {
                 $errorResponse = $this->errorHandlers->handleError($e);
                 yield from $this->responseWriter->sendResponse(

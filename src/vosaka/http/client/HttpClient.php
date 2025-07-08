@@ -59,7 +59,7 @@ final class HttpClient
                 $response = yield from $this->sendSingleRequest(
                     $currentRequest,
                     $options
-                )->unwrap();
+                );
 
                 if (
                     $options["follow_redirects"] &&
@@ -195,45 +195,34 @@ final class HttpClient
     private function sendSingleRequest(
         RequestInterface $request,
         array $options
-    ): Result {
-        $fn = function () use ($request, $options): Generator {
-            $uri = $request->getUri();
-            $host = $uri->getHost();
-            $port =
-                $uri->getPort() ?? ($uri->getScheme() === "https" ? 443 : 80);
-            $scheme = $uri->getScheme();
+    ): Generator {
+        $uri = $request->getUri();
+        $host = $uri->getHost();
+        $port = $uri->getPort() ?? ($uri->getScheme() === "https" ? 443 : 80);
+        $scheme = $uri->getScheme();
 
-            // Connect to server
-            $connectionOptions = [
-                "ssl" => $scheme === "https",
-                "timeout" => $options["timeout"],
-            ];
+        // Connect to server
+        $connectionOptions = [
+            "ssl" => $scheme === "https",
+            "timeout" => $options["timeout"],
+        ];
 
-            /**
-             * @var TCPStream $stream
-             */
-            $stream = yield from TCP::connect(
-                "$host:$port",
-                $connectionOptions
-            )->unwrap();
+        $stream = yield from TCP::connect(
+            "$host:$port",
+            $connectionOptions
+        )->unwrap();
 
-            try {
-                // Send request
-                $requestData = $this->buildHttpRequest($request, $options);
-                yield from $stream->write($requestData)->unwrap();
+        try {
+            // Send request
+            $requestData = $this->buildHttpRequest($request, $options);
+            $writeResult = yield from $stream->write($requestData)->unwrap();
 
-                // Read response
-                $response = yield from $this->readHttpResponse(
-                    $stream
-                )->unwrap();
-
-                return $response;
-            } finally {
-                $stream->close();
-            }
-        };
-
-        return Future::new($fn());
+            // Read response
+            $response = yield from $this->readHttpResponse($stream);
+            return $response;
+        } finally {
+            $stream->close();
+        }
     }
 
     private function buildHttpRequest(
@@ -254,10 +243,10 @@ final class HttpClient
         );
 
         // Ensure Host header is set
-        if (! $request->hasHeader("Host")) {
+        if (!$request->hasHeader("Host")) {
             $host = $uri->getHost();
             if ($uri->getPort() !== null) {
-                $host .= ":".$uri->getPort();
+                $host .= ":" . $uri->getPort();
             }
             $headers["Host"] = [$host];
         }
@@ -285,123 +274,105 @@ final class HttpClient
         return $http;
     }
 
-    private function readHttpResponse(TCPStream $stream): Result
+    private function readHttpResponse(TCPStream $stream): Generator
     {
-        $fn = function () use ($stream): Generator {
-            // Read status line
-            $statusLine = yield from $stream->readUntil("\r\n")->unwrap();
-            if ($statusLine === null) {
-                throw new RuntimeException(
-                    "Failed to read response status line"
-                );
+        // Read status line
+        $statusLine = yield from $stream->readUntil("\r\n")->unwrap();
+
+        if ($statusLine === null) {
+            throw new RuntimeException("Failed to read response status line");
+        }
+
+        if (
+            !preg_match(
+                '/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/',
+                $statusLine,
+                $matches
+            )
+        ) {
+            throw new RuntimeException("Invalid HTTP response status line");
+        }
+
+        $protocolVersion = $matches[1];
+        $statusCode = (int) $matches[2];
+        $reasonPhrase = $matches[3] ?? "";
+
+        // Read headers
+        $headers = [];
+        while (true) {
+            $line = yield from $stream->readUntil("\r\n")->unwrap();
+
+            if ($line === null || $line === "") {
+                break;
             }
 
-            if (
-                ! preg_match(
-                    '/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/',
-                    $statusLine,
-                    $matches
-                )
-            ) {
-                throw new RuntimeException("Invalid HTTP response status line");
+            if (!str_contains($line, ":")) {
+                continue;
             }
 
-            $protocolVersion = $matches[1];
-            $statusCode = (int) $matches[2];
-            $reasonPhrase = $matches[3] ?? "";
+            [$name, $value] = explode(":", $line, 2);
+            $name = trim($name);
+            $value = trim($value);
 
-            // Read headers
-            $headers = [];
-            while (true) {
-                $line = yield from $stream->readUntil("\r\n")->unwrap();
-                if ($line === null || $line === "") {
-                    break;
-                }
-
-                if (! str_contains($line, ":")) {
-                    continue;
-                }
-
-                [$name, $value] = explode(":", $line, 2);
-                $name = trim($name);
-                $value = trim($value);
-
-                if (! isset($headers[$name])) {
-                    $headers[$name] = [];
-                }
-                $headers[$name][] = $value;
+            if (!isset($headers[$name])) {
+                $headers[$name] = [];
             }
+            $headers[$name][] = $value;
+        }
 
-            // Read body
-            $bodyContent = "";
-            $contentLength = null;
-            $transferEncoding = null;
+        // Read body
+        $bodyContent = "";
+        $contentLength = null;
+        $transferEncoding = null;
 
-            foreach ($headers as $name => $values) {
-                $lowerName = strtolower($name);
-                if ($lowerName === "content-length") {
-                    $contentLength = (int) $values[0];
-                } elseif ($lowerName === "transfer-encoding") {
-                    $transferEncoding = strtolower($values[0]);
-                }
+        foreach ($headers as $name => $values) {
+            $lowerName = strtolower($name);
+            if ($lowerName === "content-length") {
+                $contentLength = (int) $values[0];
+            } elseif ($lowerName === "transfer-encoding") {
+                $transferEncoding = strtolower($values[0]);
             }
+        }
 
-            if ($transferEncoding === "chunked") {
-                $bodyContent = yield from $this->readChunkedBody(
-                    $stream
-                )->unwrap();
-            } elseif ($contentLength !== null && $contentLength > 0) {
-                $bodyContent = yield from $stream
-                    ->readExact($contentLength)
-                    ->unwrap();
-            }
+        if ($transferEncoding === "chunked") {
+            $bodyContent = yield from $this->readChunkedBody($stream);
+        } elseif ($contentLength !== null && $contentLength > 0) {
+            $bodyContent = yield from $stream
+                ->readExact($contentLength)
+                ->unwrap();
+        }
 
-            $body = Stream::create($bodyContent);
+        $body = Stream::create($bodyContent);
 
-            return new Response(
-                $statusCode,
-                $headers,
-                $body,
-                $protocolVersion,
-                $reasonPhrase
-            );
-        };
-
-        return Future::new($fn());
+        return new Response(
+            $statusCode,
+            $headers,
+            $body,
+            $protocolVersion,
+            $reasonPhrase
+        );
     }
 
-    private function readChunkedBody(TCPStream $stream): Result
+    private function readChunkedBody(TCPStream $stream): Generator
     {
-        $fn = function () use ($stream): Generator {
-            $body = "";
+        $body = "";
 
-            while (true) {
-                // Read chunk size line
-                $chunkSizeLine = yield from $stream->readUntil("\r\n");
-                if ($chunkSizeLine === null) {
-                    break;
-                }
+        while (true) {
+            // Read chunk size line
+            $chunkSizeLine = yield from $stream->readUntil("\r\n")->unwrap();
 
-                $chunkSize = hexdec(explode(";", $chunkSizeLine)[0]);
-
-                if ($chunkSize === 0) {
-                    // Read trailing headers (if any) and final CRLF
-                    yield from $stream->readUntil("\r\n");
-                    break;
-                }
-
-                // Read chunk data
-                $chunkData = yield from $stream->readExact($chunkSize);
-                $body .= $chunkData;
-
-                // Read trailing CRLF
-                yield from $stream->readUntil("\r\n");
+            if ($chunkSizeLine === null) {
+                break;
             }
 
-            return $body;
-        };
+            $chunkSize = hexdec(explode(";", $chunkSizeLine)[0]);
 
-        return Future::new($fn());
+            // Read chunk data
+            $chunkData = yield from $stream->readExact($chunkSize)->unwrap();
+            $body .= $chunkData;
+        }
+
+        return $body;
     }
 
     private function getDefaultHeaders(array $options): array
@@ -428,7 +399,7 @@ final class HttpClient
 
         if (is_array($body)) {
             $json = json_encode($body, JSON_THROW_ON_ERROR);
-            if (! isset($headers["Content-Type"])) {
+            if (!isset($headers["Content-Type"])) {
                 $headers["Content-Type"] = "application/json";
             }
             return Stream::create($json);
@@ -444,7 +415,7 @@ final class HttpClient
     private function validateUri($uri): void
     {
         $scheme = $uri->getScheme();
-        if (! in_array($scheme, ["http", "https"], true)) {
+        if (!in_array($scheme, ["http", "https"], true)) {
             throw new InvalidArgumentException(
                 "Only HTTP and HTTPS URLs are supported"
             );
