@@ -6,14 +6,18 @@ use vosaka\http\message\Response;
 
 require_once "../vendor/autoload.php";
 
+$time = microtime(true);
 function main(): Generator
 {
     /**
      * @var Response $response
      */
-    $response = yield from Browzr::get("https://httpbin.org/get")->unwrap();
+    $response = yield from Browzr::get("https://jsonplaceholder.typicode.com/posts/1")->unwrap();
     var_dump($response->getBody()->getContents());
 }
 
 VOsaka::spawn(main());
 VOsaka::run();
+
+$time = microtime(true) - $time;
+echo "" . $time . "";
