@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace vosaka\http\client;
 
 use Generator;
+use RuntimeException;
 use InvalidArgumentException;
 use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
-use RuntimeException;
 use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
 use venndev\vosaka\net\tcp\TCP;
