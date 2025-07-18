@@ -206,6 +206,9 @@ final class HttpClient
             "timeout" => $options["timeout"],
         ];
 
+        /**
+         * @var TCPStream $stream
+         */
         $stream = yield from TCP::connect(
             "$host:$port",
             $connectionOptions
@@ -214,7 +217,7 @@ final class HttpClient
         try {
             // Send request
             $requestData = $this->buildHttpRequest($request, $options);
-            $writeResult = yield from $stream->write($requestData)->unwrap();
+            yield from $stream->write($requestData)->unwrap();
 
             // Read response
             $response = yield from $this->readHttpResponse($stream);

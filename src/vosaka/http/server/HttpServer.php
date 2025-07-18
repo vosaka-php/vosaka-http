@@ -166,7 +166,6 @@ final class HttpServer
                 yield from $client->flush()->unwrap();
             }
         } catch (Throwable $e) {
-            var_dump($e->getMessage());
             try {
                 $errorResponse = $this->errorHandlers->handleError($e);
                 yield from $this->responseWriter->sendResponse(
