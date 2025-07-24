@@ -277,4 +277,4 @@ public group(string $prefix, \Closure $callback, array $middleware = []): self
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

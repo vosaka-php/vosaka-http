@@ -20,7 +20,7 @@
 
 
 ```php
-private ?\venndev\vosaka\net\tcp\TCPListener $listener
+private ?\venndev\vosaka\net\tcp\TCPServer $listener
 ```
 
 
@@ -455,7 +455,7 @@ public shutdown(): void
 
 
 ```php
-private handleConnection(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
+private handleConnection(\venndev\vosaka\net\tcp\TCPConnection $client): \Generator
 ```
 
 
@@ -469,7 +469,7 @@ private handleConnection(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
+| `$client` | **\venndev\vosaka\net\tcp\TCPConnection** |  |
 
 
 
@@ -479,4 +479,4 @@ private handleConnection(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

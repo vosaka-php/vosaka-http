@@ -28,7 +28,7 @@ This is an automatically generated documentation for **Documentation**.
 
 | Class | Description |
 |-------|-------------|
-| [`HttpClient`](./classes/vosaka/http/client/HttpClient.md) | Asynchronous HTTP Client using VOsaka runtime.|
+| [`HttpClient`](./classes/vosaka/http/client/HttpClient.md) | Asynchronous HTTP Client using cURL Multi with VOsaka runtime.|
 
 
 
@@ -67,6 +67,7 @@ This is an automatically generated documentation for **Documentation**.
 | Class | Description |
 |-------|-------------|
 | [`CorsMiddleware`](./classes/vosaka/http/middleware/CorsMiddleware.md) | CORS (Cross-Origin Resource Sharing) middleware.|
+| [`FaviconMiddleware`](./classes/vosaka/http/middleware/FaviconMiddleware.md) | Favicon middleware.|
 | [`MiddlewareStack`](./classes/vosaka/http/middleware/MiddlewareStack.md) | Middleware stack for composing middleware layers|
 | [`RateLimitMiddleware`](./classes/vosaka/http/middleware/RateLimitMiddleware.md) | Rate limiting middleware for request throttling.|
 
@@ -129,4 +130,4 @@ This is an automatically generated documentation for **Documentation**.
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

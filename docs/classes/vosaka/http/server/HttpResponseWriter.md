@@ -21,7 +21,7 @@
 
 
 ```php
-public sendResponse(\venndev\vosaka\net\tcp\TCPStream $client, \Psr\Http\Message\ResponseInterface $response): \Generator
+public sendResponse(\venndev\vosaka\net\tcp\TCPConnection $client, \Psr\Http\Message\ResponseInterface $response): \Generator
 ```
 
 
@@ -35,7 +35,7 @@ public sendResponse(\venndev\vosaka\net\tcp\TCPStream $client, \Psr\Http\Message
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
+| `$client` | **\venndev\vosaka\net\tcp\TCPConnection** |  |
 | `$response` | **\Psr\Http\Message\ResponseInterface** |  |
 
 
@@ -128,4 +128,4 @@ public shouldKeepAlive(\Psr\Http\Message\ServerRequestInterface $request, \Psr\H
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

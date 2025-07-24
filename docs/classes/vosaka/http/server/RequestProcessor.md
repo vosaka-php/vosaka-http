@@ -247,4 +247,4 @@ private convertToResponse(mixed $result): \Psr\Http\Message\ResponseInterface
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

@@ -33,7 +33,7 @@ public int $maxRequestSize
 
 
 ```php
-public int $keepAliveTimeout
+public float $keepAliveTimeout
 ```
 
 
@@ -48,7 +48,7 @@ public int $keepAliveTimeout
 
 
 ```php
-public int $requestTimeout
+public float $requestTimeout
 ```
 
 
@@ -81,7 +81,7 @@ public bool $debug
 
 
 ```php
-public __construct(int $maxRequestSize = 1048576, int $keepAliveTimeout = 3, int $requestTimeout = 3, bool $debug = false): mixed
+public __construct(int $maxRequestSize = 1048576, float $keepAliveTimeout = 3.0, float $requestTimeout = 3.0, bool $debug = false): mixed
 ```
 
 
@@ -96,8 +96,8 @@ public __construct(int $maxRequestSize = 1048576, int $keepAliveTimeout = 3, int
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `$maxRequestSize` | **int** |  |
-| `$keepAliveTimeout` | **int** |  |
-| `$requestTimeout` | **int** |  |
+| `$keepAliveTimeout` | **float** |  |
+| `$requestTimeout` | **float** |  |
 | `$debug` | **bool** |  |
 
 
@@ -108,4 +108,4 @@ public __construct(int $maxRequestSize = 1048576, int $keepAliveTimeout = 3, int
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

@@ -1,10 +1,10 @@
 <?php
 
+require_once "../vendor/autoload.php";
+
 use venndev\vosaka\VOsaka;
 use vosaka\http\Browzr;
 use vosaka\http\message\Response;
-
-require_once "../vendor/autoload.php";
 
 $time = microtime(true);
 function main(): Generator

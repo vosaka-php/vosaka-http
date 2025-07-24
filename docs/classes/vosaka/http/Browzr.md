@@ -923,27 +923,6 @@ public static resetDefaultClient(): void
 
 ***
 
-### version
-
-Get library version information.
-
-```php
-public static version(): array
-```
-
-
-
-* This method is **static**.
-
-
-
-
-
-
-
 
 ***
-
-
-***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

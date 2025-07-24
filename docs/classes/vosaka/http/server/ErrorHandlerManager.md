@@ -370,4 +370,4 @@ private defaultErrorHandler(\Throwable $error, ?\Psr\Http\Message\ServerRequestI
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

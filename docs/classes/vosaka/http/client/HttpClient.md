@@ -2,11 +2,11 @@
 
 # HttpClient
 
-Asynchronous HTTP Client using VOsaka runtime.
+Asynchronous HTTP Client using cURL Multi with VOsaka runtime.
 
-This client provides async HTTP request capabilities using the VOsaka
-event loop system. It supports GET, POST, PUT, DELETE and other HTTP
-methods with configurable timeouts, headers, and SSL options.
+This client provides async HTTP request capabilities using cURL Multi
+handle for non-blocking operations. It supports GET, POST, PUT, DELETE
+and other HTTP methods with configurable timeouts, headers, and SSL options.
 
 * Full name: `\vosaka\http\client\HttpClient`
 * This class is marked as **final** and can't be subclassed
@@ -28,6 +28,36 @@ private array $defaultOptions
 
 
 
+
+
+***
+
+### multiHandle
+
+
+
+```php
+private static mixed $multiHandle
+```
+
+
+
+* This property is **static**.
+
+
+***
+
+### activeHandles
+
+
+
+```php
+private static array $activeHandles
+```
+
+
+
+* This property is **static**.
 
 
 ***
@@ -267,12 +297,54 @@ public head(string $url, array $headers = [], array $options = []): \venndev\vos
 
 ***
 
-### options
+### getDefaultCABundle
 
-Send a OPTIONS request.
+Get the default CA bundle path.
 
 ```php
-public options(string $url, array $headers = [], array $options = []): \venndev\vosaka\core\Result
+private static getDefaultCABundle(): ?string
+```
+
+Tries multiple common locations.
+
+* This method is **static**.
+
+
+
+
+
+
+
+
+***
+
+### downloadCABundle
+
+Download CA bundle from curl.se
+
+```php
+private static downloadCABundle(): ?string
+```
+
+
+
+* This method is **static**.
+
+
+
+
+
+
+
+
+***
+
+### configureCurl
+
+Configure cURL handle with request options.
+
+```php
+private configureCurl(mixed $ch, \Psr\Http\Message\RequestInterface $request, array $options): void
 ```
 
 
@@ -286,8 +358,8 @@ public options(string $url, array $headers = [], array $options = []): \venndev\
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$url` | **string** |  |
-| `$headers` | **array** |  |
+| `$ch` | **mixed** |  |
+| `$request` | **\Psr\Http\Message\RequestInterface** |  |
 | `$options` | **array** |  |
 
 
@@ -296,12 +368,66 @@ public options(string $url, array $headers = [], array $options = []): \venndev\
 
 ***
 
-### sendSingleRequest
+### executeAsync
 
-
+Execute cURL request asynchronously.
 
 ```php
-private sendSingleRequest(\Psr\Http\Message\RequestInterface $request, array $options): \venndev\vosaka\core\Result
+private executeAsync(mixed $ch): \Generator
+```
+
+
+
+
+
+
+
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `$ch` | **mixed** |  |
+
+
+
+
+
+***
+
+### parseResponse
+
+Parse cURL response into Response object.
+
+```php
+private parseResponse(mixed $ch): \vosaka\http\message\Response
+```
+
+
+
+
+
+
+
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `$ch` | **mixed** |  |
+
+
+
+
+
+***
+
+### buildHeaders
+
+Build headers array for cURL.
+
+```php
+private buildHeaders(\Psr\Http\Message\RequestInterface $request, array $options): array
 ```
 
 
@@ -316,115 +442,6 @@ private sendSingleRequest(\Psr\Http\Message\RequestInterface $request, array $op
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `$request` | **\Psr\Http\Message\RequestInterface** |  |
-| `$options` | **array** |  |
-
-
-
-
-
-***
-
-### buildHttpRequest
-
-
-
-```php
-private buildHttpRequest(\Psr\Http\Message\RequestInterface $request, array $options): string
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$request` | **\Psr\Http\Message\RequestInterface** |  |
-| `$options` | **array** |  |
-
-
-
-
-
-***
-
-### readHttpResponse
-
-
-
-```php
-private readHttpResponse(\venndev\vosaka\net\tcp\TCPStream $stream): \venndev\vosaka\core\Result
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$stream` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### readChunkedBody
-
-
-
-```php
-private readChunkedBody(\venndev\vosaka\net\tcp\TCPStream $stream): \venndev\vosaka\core\Result
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$stream` | **\venndev\vosaka\net\tcp\TCPStream** |  |
-
-
-
-
-
-***
-
-### getDefaultHeaders
-
-
-
-```php
-private getDefaultHeaders(array $options): array
-```
-
-
-
-
-
-
-
-
-**Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
 | `$options` | **array** |  |
 
 
@@ -435,7 +452,7 @@ private getDefaultHeaders(array $options): array
 
 ### prepareBody
 
-
+Prepare request body.
 
 ```php
 private prepareBody(mixed $body, array& $headers): \vosaka\http\message\Stream
@@ -463,7 +480,7 @@ private prepareBody(mixed $body, array& $headers): \vosaka\http\message\Stream
 
 ### validateUri
 
-
+Validate URI.
 
 ```php
 private validateUri(mixed $uri): void
@@ -488,12 +505,12 @@ private validateUri(mixed $uri): void
 
 ***
 
-### isRedirectStatus
+### __destruct
 
-
+Cleanup mixeds on destruction.
 
 ```php
-private isRedirectStatus(int $statusCode): bool
+public __destruct(): mixed
 ```
 
 
@@ -503,11 +520,26 @@ private isRedirectStatus(int $statusCode): bool
 
 
 
-**Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `$statusCode` | **int** |  |
+
+
+
+***
+
+### shutdown
+
+Close the multi handle (call this when shutting down).
+
+```php
+public static shutdown(): void
+```
+
+
+
+* This method is **static**.
+
+
+
 
 
 
@@ -517,4 +549,4 @@ private isRedirectStatus(int $statusCode): bool
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

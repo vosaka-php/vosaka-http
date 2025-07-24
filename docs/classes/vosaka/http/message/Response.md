@@ -761,4 +761,4 @@ public static redirect(string $url, int $statusCode = 302): self
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

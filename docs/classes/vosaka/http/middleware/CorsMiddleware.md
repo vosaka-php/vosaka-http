@@ -227,4 +227,4 @@ public static strict(array $allowedOrigins = []): self
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

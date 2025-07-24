@@ -6,7 +6,7 @@ namespace vosaka\http\server;
 
 use Generator;
 use Psr\Http\Message\ServerRequestInterface;
-use venndev\vosaka\net\tcp\TCPStream;
+use venndev\vosaka\net\tcp\TCPConnection;
 use vosaka\http\exceptions\HttpException;
 use vosaka\http\message\ServerRequest;
 use vosaka\http\message\Stream;
@@ -21,7 +21,7 @@ final class HttpRequestParser
         $this->config = $config;
     }
 
-    public function parseRequest(TCPStream $client): Generator
+    public function parseRequest(TCPConnection $client): Generator
     {
         $requestLine = yield from $client->readUntil("\r\n")->unwrap();
         if (empty($requestLine)) {
@@ -75,7 +75,7 @@ final class HttpRequestParser
         return [$method, $uri, substr($version, 5)]; // Remove 'HTTP/' prefix
     }
 
-    private function parseHeaders(TCPStream $client): Generator
+    private function parseHeaders(TCPConnection $client): Generator
     {
         $headers = [];
         while (true) {
@@ -94,7 +94,7 @@ final class HttpRequestParser
         return $headers;
     }
 
-    private function parseBody(TCPStream $client, array $headers): Generator
+    private function parseBody(TCPConnection $client, array $headers): Generator
     {
         $contentLength = (int) ($headers["content-length"][0] ?? 0);
 
@@ -114,8 +114,7 @@ final class HttpRequestParser
     private function buildServerParams(
         string $method,
         string $target,
-        string $version,
-        TCPStream $client
+        string $version
     ): array {
         static $time = null;
         static $timeFloat = null;
@@ -133,7 +132,6 @@ final class HttpRequestParser
             "REQUEST_METHOD" => $method,
             "REQUEST_URI" => $target,
             "SERVER_PROTOCOL" => "HTTP/$version",
-            "REMOTE_ADDR" => $client->peerAddr(),
             "REQUEST_TIME" => $time,
             "REQUEST_TIME_FLOAT" => $timeFloat,
         ];

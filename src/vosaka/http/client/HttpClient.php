@@ -10,34 +10,56 @@ use InvalidArgumentException;
 use Psr\Http\Message\RequestInterface;
 use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
-use venndev\vosaka\net\tcp\TCP;
-use venndev\vosaka\net\tcp\TCPStream;
 use vosaka\http\message\Request;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
-use vosaka\http\message\Uri;
 
 /**
- * Asynchronous HTTP Client using VOsaka runtime.
+ * Asynchronous HTTP Client using cURL Multi with VOsaka runtime.
  *
- * This client provides async HTTP request capabilities using the VOsaka
- * event loop system. It supports GET, POST, PUT, DELETE and other HTTP
- * methods with configurable timeouts, headers, and SSL options.
+ * This client provides async HTTP request capabilities using cURL Multi
+ * handle for non-blocking operations. It supports GET, POST, PUT, DELETE 
+ * and other HTTP methods with configurable timeouts, headers, and SSL options.
  */
 final class HttpClient
 {
     private array $defaultOptions = [
         "timeout" => 30,
+        "connect_timeout" => 10,
         "follow_redirects" => true,
-        "max_redirects" => 1,
-        "ssl_verify" => true,
+        "max_redirects" => 5,
+        "ssl_verify" => false,
+        "ssl_ca_bundle" => null, // Path to CA bundle file
+        "ssl_cert" => null,      // Client certificate
+        "ssl_key" => null,       // Client key
         "user_agent" => "VOsaka-HTTP/1.0",
         "headers" => [],
+        "proxy" => null,
+        "cookies" => null,
     ];
+
+    private static mixed $multiHandle = null;
+    private static array $activeHandles = [];
 
     public function __construct(array $options = [])
     {
         $this->defaultOptions = array_merge($this->defaultOptions, $options);
+
+        // Auto-detect CA bundle if not specified and SSL verify is enabled
+        if (
+            $this->defaultOptions['ssl_verify'] &&
+            $this->defaultOptions['ssl_ca_bundle'] === null
+        ) {
+            $this->defaultOptions['ssl_ca_bundle'] = self::getDefaultCABundle();
+        }
+
+        // Initialize cURL multi handle if not exists
+        if (self::$multiHandle === null) {
+            self::$multiHandle = curl_multi_init();
+            if (self::$multiHandle === false) {
+                throw new RuntimeException("Failed to initialize cURL multi handle");
+            }
+        }
     }
 
     /**
@@ -51,51 +73,38 @@ final class HttpClient
             $uri = $request->getUri();
             $this->validateUri($uri);
 
-            $redirectCount = 0;
-            $currentRequest = $request;
-
-            while ($redirectCount <= $options["max_redirects"]) {
-                $response = yield from $this->sendSingleRequest(
-                    $currentRequest,
-                    $options
-                );
-
-                if (
-                    $options["follow_redirects"] &&
-                    $this->isRedirectStatus($response->getStatusCode())
-                ) {
-                    $location = $response->getHeaderLine("Location");
-                    if ($location === "") {
-                        break;
-                    }
-
-                    $redirectCount++;
-                    if ($redirectCount > $options["max_redirects"]) {
-                        throw new RuntimeException(
-                            "Maximum redirect limit exceeded"
-                        );
-                    }
-
-                    $newUri = Uri::resolve(
-                        $currentRequest->getUri(),
-                        new Uri($location)
-                    );
-                    $currentRequest = $currentRequest->withUri($newUri);
-
-                    if ($response->getStatusCode() === 303) {
-                        $currentRequest = $currentRequest
-                            ->withMethod("GET")
-                            ->withBody(Stream::create(""));
-                    }
-
-                    continue;
-                }
-
-                return $response;
+            // Create cURL handle
+            $ch = curl_init();
+            if ($ch === false) {
+                throw new RuntimeException("Failed to initialize cURL handle");
             }
 
-            return $response ??
-                throw new RuntimeException("No response received");
+            try {
+                // Configure cURL options
+                $this->configureCurl($ch, $request, $options);
+
+                // Add to multi handle
+                $code = curl_multi_add_handle(self::$multiHandle, $ch);
+                if ($code !== CURLM_OK) {
+                    throw new RuntimeException("Failed to add cURL handle to multi handle");
+                }
+
+                // Store handle reference
+                $handleId = spl_object_id((object)$ch);
+                self::$activeHandles[$handleId] = $ch;
+
+                // Execute async request
+                $response = yield from $this->executeAsync($ch, $handleId);
+
+                return $response;
+            } finally {
+                // Cleanup
+                if (isset(self::$activeHandles[$handleId])) {
+                    curl_multi_remove_handle(self::$multiHandle, $ch);
+                    unset(self::$activeHandles[$handleId]);
+                }
+                curl_close($ch);
+            }
         };
 
         return Future::new($fn());
@@ -180,174 +189,273 @@ final class HttpClient
     }
 
     /**
-     * Send a OPTIONS request.
+     * Get the default CA bundle path.
+     * Tries multiple common locations.
      */
-    public function options(
-        string $url,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $request = new Request("OPTIONS", $url, $headers);
-        return $this->send($request, $options);
-    }
+    private static function getDefaultCABundle(): ?string
+    {
+        // Common CA bundle locations
+        $possiblePaths = [
+            // Set by environment
+            getenv('SSL_CERT_FILE'),
+            getenv('CURL_CA_BUNDLE'),
 
-    private function sendSingleRequest(
-        RequestInterface $request,
-        array $options
-    ): Generator {
-        $uri = $request->getUri();
-        $host = $uri->getHost();
-        $port = $uri->getPort() ?? ($uri->getScheme() === "https" ? 443 : 80);
-        $scheme = $uri->getScheme();
+            // Common Linux/Unix paths
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/etc/pki/tls/certs/ca-bundle.crt',
+            '/etc/ssl/ca-bundle.pem',
+            '/etc/ssl/cert.pem',
+            '/usr/local/share/certs/ca-root-nss.crt',
+            '/usr/share/ssl/certs/ca-bundle.crt',
 
-        // Connect to server
-        $connectionOptions = [
-            "ssl" => $scheme === "https",
-            "timeout" => $options["timeout"],
+            // macOS
+            '/usr/local/etc/openssl/cert.pem',
+            '/usr/local/etc/openssl@1.1/cert.pem',
+            '/usr/local/etc/openssl@3/cert.pem',
+            '/opt/homebrew/etc/ca-certificates/cert.pem',
+
+            // Windows (with Git)
+            'C:\Program Files\Git\mingw64\ssl\certs\ca-bundle.crt',
+            'C:\Program Files (x86)\Git\mingw32\ssl\certs\ca-bundle.crt',
+
+            // PHP configuration
+            ini_get('curl.cainfo'),
+            ini_get('openssl.cafile'),
         ];
 
-        /**
-         * @var TCPStream $stream
-         */
-        $stream = yield from TCP::connect(
-            "$host:$port",
-            $connectionOptions
-        )->unwrap();
-
-        try {
-            // Send request
-            $requestData = $this->buildHttpRequest($request, $options);
-            yield from $stream->write($requestData)->unwrap();
-
-            // Read response
-            $response = yield from $this->readHttpResponse($stream);
-            return $response;
-        } finally {
-            $stream->close();
+        // Check each possible path
+        foreach ($possiblePaths as $path) {
+            if ($path && file_exists($path) && is_readable($path)) {
+                return $path;
+            }
         }
+
+        // Try to download if not found
+        return self::downloadCABundle();
     }
 
-    private function buildHttpRequest(
+    /**
+     * Download CA bundle from curl.se
+     */
+    private static function downloadCABundle(): ?string
+    {
+        $cacheDir = sys_get_temp_dir() . '/vosaka-http';
+        $cacertPath = $cacheDir . '/cacert.pem';
+
+        // Check if already downloaded and fresh (less than 30 days)
+        if (file_exists($cacertPath)) {
+            $age = time() - filemtime($cacertPath);
+            if ($age < 30 * 24 * 60 * 60) { // 30 days
+                return $cacertPath;
+            }
+        }
+
+        // Create directory
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0755, true);
+        }
+
+        // Download using system curl or file_get_contents
+        $url = 'https://curl.se/ca/cacert.pem';
+
+        // Try curl command first
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $cmd = sprintf(
+                'curl -fsSL -o %s %s',
+                escapeshellarg($cacertPath),
+                escapeshellarg($url)
+            );
+            exec($cmd, $output, $result);
+            if ($result === 0 && file_exists($cacertPath)) {
+                return $cacertPath;
+            }
+        }
+
+        // Fallback to file_get_contents
+        $context = stream_context_create([
+            'http' => ['timeout' => 30],
+            'ssl' => ['verify_peer' => false] // OK for downloading CA bundle
+        ]);
+
+        $content = @file_get_contents($url, false, $context);
+        if ($content !== false) {
+            file_put_contents($cacertPath, $content);
+            return $cacertPath;
+        }
+
+        return null;
+    }
+
+    /**
+     * Configure cURL handle with request options.
+     */
+    private function configureCurl(
+        mixed $ch,
         RequestInterface $request,
         array $options
-    ): string {
+    ): void {
         $uri = $request->getUri();
-        $method = $request->getMethod();
-        $target = $request->getRequestTarget();
+        $url = (string)$uri;
 
-        // Start with request line
-        $http = "$method $target HTTP/1.1\r\n";
+        // Basic options
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
 
-        // Add headers
-        $headers = array_merge(
-            $this->getDefaultHeaders($options),
-            $request->getHeaders()
-        );
+        // Timeouts
+        curl_setopt($ch, CURLOPT_TIMEOUT, $options["timeout"]);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $options["connect_timeout"]);
 
-        // Ensure Host header is set
-        if (!$request->hasHeader("Host")) {
-            $host = $uri->getHost();
-            if ($uri->getPort() !== null) {
-                $host .= ":" . $uri->getPort();
-            }
-            $headers["Host"] = [$host];
+        // Follow redirects
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, $options["follow_redirects"]);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, $options["max_redirects"]);
+
+        // SSL options
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $options["ssl_verify"]);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $options["ssl_verify"] ? 2 : 0);
+
+        // CA bundle
+        if ($options["ssl_ca_bundle"] !== null) {
+            curl_setopt($ch, CURLOPT_CAINFO, $options["ssl_ca_bundle"]);
         }
 
-        // Add content-length for body
+        // Client certificate
+        if ($options["ssl_cert"] !== null) {
+            curl_setopt($ch, CURLOPT_SSLCERT, $options["ssl_cert"]);
+        }
+
+        // Client key
+        if ($options["ssl_key"] !== null) {
+            curl_setopt($ch, CURLOPT_SSLKEY, $options["ssl_key"]);
+        }
+
+        // Headers
+        $headers = $this->buildHeaders($request, $options);
+        if (!empty($headers)) {
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        }
+
+        // Body
         $body = $request->getBody();
         if ($body->getSize() > 0) {
-            $headers["Content-Length"] = [$body->getSize()];
-        }
-
-        foreach ($headers as $name => $values) {
-            foreach ((array) $values as $value) {
-                $http .= "$name: $value\r\n";
-            }
-        }
-
-        $http .= "\r\n";
-
-        // Add body
-        if ($body->getSize() > 0) {
             $body->rewind();
-            $http .= $body->getContents();
+            $bodyContent = $body->getContents();
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyContent);
         }
 
-        return $http;
+        // Proxy
+        if ($options["proxy"] !== null) {
+            curl_setopt($ch, CURLOPT_PROXY, $options["proxy"]);
+        }
+
+        // Cookies
+        if ($options["cookies"] !== null) {
+            curl_setopt($ch, CURLOPT_COOKIE, $options["cookies"]);
+        }
     }
 
-    private function readHttpResponse(TCPStream $stream): Generator
+    /**
+     * Execute cURL request asynchronously.
+     */
+    private function executeAsync(mixed $ch): Generator
     {
-        // Read status line
-        $statusLine = yield from $stream->readUntil("\r\n")->unwrap();
+        $active = null;
 
-        if ($statusLine === null) {
-            throw new RuntimeException("Failed to read response status line");
+        // Start execution
+        do {
+            $status = curl_multi_exec(self::$multiHandle, $active);
+            yield;
+        } while ($status === CURLM_CALL_MULTI_PERFORM);
+
+        if ($status !== CURLM_OK) {
+            throw new RuntimeException("cURL multi exec failed: " . curl_multi_strerror($status));
         }
 
-        if (
-            !preg_match(
-                '/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/',
-                $statusLine,
-                $matches
-            )
-        ) {
-            throw new RuntimeException("Invalid HTTP response status line");
-        }
+        // Wait for completion
+        while ($active && $status === CURLM_OK) {
+            yield;
 
-        $protocolVersion = $matches[1];
-        $statusCode = (int) $matches[2];
-        $reasonPhrase = $matches[3] ?? "";
+            // Wait for activity
+            $select = curl_multi_select(self::$multiHandle, 0.1);
 
-        // Read headers
-        $headers = [];
-        while (true) {
-            $line = yield from $stream->readUntil("\r\n")->unwrap();
-
-            if ($line === null || $line === "") {
-                break;
-            }
-
-            if (!str_contains($line, ":")) {
+            if ($select === -1) {
                 continue;
             }
 
-            [$name, $value] = explode(":", $line, 2);
-            $name = trim($name);
-            $value = trim($value);
-
-            if (!isset($headers[$name])) {
-                $headers[$name] = [];
-            }
-            $headers[$name][] = $value;
+            // Continue execution
+            do {
+                $status = curl_multi_exec(self::$multiHandle, $active);
+                yield;
+            } while ($status === CURLM_CALL_MULTI_PERFORM);
         }
 
-        // Read body
-        $bodyContent = "";
-        $contentLength = null;
-        $transferEncoding = null;
+        // Check for completed transfers
+        while ($info = curl_multi_info_read(self::$multiHandle)) {
+            if ($info['handle'] === $ch) {
+                if ($info['result'] !== CURLE_OK) {
+                    $error = curl_error($ch);
+                    throw new RuntimeException("cURL request failed: " . $error);
+                }
 
-        foreach ($headers as $name => $values) {
-            $lowerName = strtolower($name);
-            if ($lowerName === "content-length") {
-                $contentLength = (int) $values[0];
-            } elseif ($lowerName === "transfer-encoding") {
-                $transferEncoding = strtolower($values[0]);
+                // Get response
+                $response = $this->parseResponse($ch);
+                return $response;
             }
         }
 
-        if ($transferEncoding === "chunked") {
-            $bodyContent = yield from $this->readChunkedBody($stream);
-        } elseif ($contentLength !== null && $contentLength > 0) {
-            $bodyContent = yield from $stream
-                ->readExact($contentLength)
-                ->unwrap();
+        throw new RuntimeException("Request did not complete");
+    }
+
+    /**
+     * Parse cURL response into Response object.
+     */
+    private function parseResponse(mixed $ch): Response
+    {
+        $responseData = curl_multi_getcontent($ch);
+        if ($responseData === false) {
+            throw new RuntimeException("Failed to get cURL response content");
         }
 
-        $body = Stream::create($bodyContent);
+        // Get response info
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+
+        // Split headers and body
+        $headerString = substr($responseData, 0, $headerSize);
+        $bodyString = substr($responseData, $headerSize);
+
+        // Parse headers
+        $headers = [];
+        $reasonPhrase = "";
+        $protocolVersion = "1.1";
+
+        $headerLines = explode("\r\n", trim($headerString));
+        foreach ($headerLines as $i => $line) {
+            if ($i === 0) {
+                // Status line
+                if (preg_match('/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/', $line, $matches)) {
+                    $protocolVersion = $matches[1];
+                    $reasonPhrase = $matches[3] ?? "";
+                }
+            } elseif (!empty($line) && str_contains($line, ":")) {
+                // Header line
+                [$name, $value] = explode(":", $line, 2);
+                $name = trim($name);
+                $value = trim($value);
+
+                if (!isset($headers[$name])) {
+                    $headers[$name] = [];
+                }
+                $headers[$name][] = $value;
+            }
+        }
+
+        // Create response
+        $body = Stream::create($bodyString);
 
         return new Response(
-            $statusCode,
+            $httpCode,
             $headers,
             $body,
             $protocolVersion,
@@ -355,40 +463,38 @@ final class HttpClient
         );
     }
 
-    private function readChunkedBody(TCPStream $stream): Generator
+    /**
+     * Build headers array for cURL.
+     */
+    private function buildHeaders(RequestInterface $request, array $options): array
     {
-        $body = "";
+        $headers = [];
 
-        while (true) {
-            // Read chunk size line
-            $chunkSizeLine = yield from $stream->readUntil("\r\n")->unwrap();
-
-            if ($chunkSizeLine === null) {
-                break;
-            }
-
-            $chunkSize = hexdec(explode(";", $chunkSizeLine)[0]);
-
-            // Read chunk data
-            $chunkData = yield from $stream->readExact($chunkSize)->unwrap();
-            $body .= $chunkData;
-        }
-
-        return $body;
-    }
-
-    private function getDefaultHeaders(array $options): array
-    {
-        return array_merge(
+        // Add default headers
+        $defaultHeaders = array_merge(
             [
-                "User-Agent" => [$options["user_agent"]],
-                "Connection" => ["close"],
-                "Accept" => ["*/*"],
+                "User-Agent" => $options["user_agent"],
+                "Accept" => "*/*",
             ],
             $options["headers"]
         );
+
+        // Merge with request headers
+        $allHeaders = array_merge($defaultHeaders, $request->getHeaders());
+
+        // Format for cURL
+        foreach ($allHeaders as $name => $values) {
+            foreach ((array)$values as $value) {
+                $headers[] = "$name: $value";
+            }
+        }
+
+        return $headers;
     }
 
+    /**
+     * Prepare request body.
+     */
     private function prepareBody(mixed $body, array &$headers): Stream
     {
         if ($body === null) {
@@ -414,6 +520,9 @@ final class HttpClient
         throw new InvalidArgumentException("Invalid body type");
     }
 
+    /**
+     * Validate URI.
+     */
     private function validateUri($uri): void
     {
         $scheme = $uri->getScheme();
@@ -428,8 +537,27 @@ final class HttpClient
         }
     }
 
-    private function isRedirectStatus(int $statusCode): bool
+    /**
+     * Cleanup mixeds on destruction.
+     */
+    public function __destruct()
     {
-        return in_array($statusCode, [301, 302, 303, 307, 308], true);
+        // Clean up any remaining handles
+        foreach (self::$activeHandles as $ch) {
+            curl_multi_remove_handle(self::$multiHandle, $ch);
+            curl_close($ch);
+        }
+    }
+
+    /**
+     * Close the multi handle (call this when shutting down).
+     */
+    public static function shutdown(): void
+    {
+        if (self::$multiHandle !== null) {
+            curl_multi_close(self::$multiHandle);
+            self::$multiHandle = null;
+        }
+        self::$activeHandles = [];
     }
 }

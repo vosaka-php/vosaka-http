@@ -65,7 +65,7 @@ public __construct(\vosaka\http\server\ServerConfig $config): mixed
 
 
 ```php
-public parseRequest(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
+public parseRequest(\venndev\vosaka\net\tcp\TCPConnection $client): \Generator
 ```
 
 
@@ -79,7 +79,7 @@ public parseRequest(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
+| `$client` | **\venndev\vosaka\net\tcp\TCPConnection** |  |
 
 
 
@@ -119,7 +119,7 @@ private parseRequestLine(string $line): ?array
 
 
 ```php
-private parseHeaders(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
+private parseHeaders(\venndev\vosaka\net\tcp\TCPConnection $client): \Generator
 ```
 
 
@@ -133,7 +133,7 @@ private parseHeaders(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
+| `$client` | **\venndev\vosaka\net\tcp\TCPConnection** |  |
 
 
 
@@ -146,7 +146,7 @@ private parseHeaders(\venndev\vosaka\net\tcp\TCPStream $client): \Generator
 
 
 ```php
-private parseBody(\venndev\vosaka\net\tcp\TCPStream $client, array $headers): \Generator
+private parseBody(\venndev\vosaka\net\tcp\TCPConnection $client, array $headers): \Generator
 ```
 
 
@@ -160,7 +160,7 @@ private parseBody(\venndev\vosaka\net\tcp\TCPStream $client, array $headers): \G
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
+| `$client` | **\venndev\vosaka\net\tcp\TCPConnection** |  |
 | `$headers` | **array** |  |
 
 
@@ -174,7 +174,7 @@ private parseBody(\venndev\vosaka\net\tcp\TCPStream $client, array $headers): \G
 
 
 ```php
-private buildServerParams(string $method, string $target, string $version, \venndev\vosaka\net\tcp\TCPStream $client): array
+private buildServerParams(string $method, string $target, string $version): array
 ```
 
 
@@ -191,7 +191,6 @@ private buildServerParams(string $method, string $target, string $version, \venn
 | `$method` | **string** |  |
 | `$target` | **string** |  |
 | `$version` | **string** |  |
-| `$client` | **\venndev\vosaka\net\tcp\TCPStream** |  |
 
 
 
@@ -284,4 +283,4 @@ private isFormData(\Psr\Http\Message\ServerRequestInterface $request): bool
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

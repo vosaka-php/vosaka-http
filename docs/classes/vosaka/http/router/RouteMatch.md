@@ -76,4 +76,4 @@ public __construct(\vosaka\http\router\RouteDefinition $route, array $params): m
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

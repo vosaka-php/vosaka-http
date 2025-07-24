@@ -125,4 +125,4 @@ public with_config(\vosaka\http\server\Router $router, \vosaka\http\server\Serve
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

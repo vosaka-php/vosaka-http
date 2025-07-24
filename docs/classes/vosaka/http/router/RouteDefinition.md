@@ -142,4 +142,4 @@ public __construct(string $method, string $pattern, \Closure $handler, array $mi
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24

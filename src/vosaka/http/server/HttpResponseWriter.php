@@ -7,25 +7,25 @@ namespace vosaka\http\server;
 use Generator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use venndev\vosaka\net\tcp\TCPStream;
+use venndev\vosaka\net\tcp\TCPConnection;
 
 final class HttpResponseWriter
 {
     public function sendResponse(
-        TCPStream $client,
+        TCPConnection $client,
         ResponseInterface $response
     ): Generator {
         // Pre-build common status lines for performance
         static $statusLines = [
-        200 => "HTTP/1.1 200 OK\r\n",
-        201 => "HTTP/1.1 201 Created\r\n",
-        204 => "HTTP/1.1 204 No Content\r\n",
-        400 => "HTTP/1.1 400 Bad Request\r\n",
-        401 => "HTTP/1.1 401 Unauthorized\r\n",
-        403 => "HTTP/1.1 403 Forbidden\r\n",
-        404 => "HTTP/1.1 404 Not Found\r\n",
-        405 => "HTTP/1.1 405 Method Not Allowed\r\n",
-        500 => "HTTP/1.1 500 Internal Server Error\r\n",
+            200 => "HTTP/1.1 200 OK\r\n",
+            201 => "HTTP/1.1 201 Created\r\n",
+            204 => "HTTP/1.1 204 No Content\r\n",
+            400 => "HTTP/1.1 400 Bad Request\r\n",
+            401 => "HTTP/1.1 401 Unauthorized\r\n",
+            403 => "HTTP/1.1 403 Forbidden\r\n",
+            404 => "HTTP/1.1 404 Not Found\r\n",
+            405 => "HTTP/1.1 405 Method Not Allowed\r\n",
+            500 => "HTTP/1.1 500 Internal Server Error\r\n",
         ];
 
         $statusCode = $response->getStatusCode();
@@ -67,7 +67,7 @@ final class HttpResponseWriter
         // Cache date header for 1 second (HTTP standard allows this)
         $now = time();
         if ($dateCache === null || $now > $dateCacheTime) {
-            $dateCache = "Date: ".gmdate("D, d M Y H:i:s T");
+            $dateCache = "Date: " . gmdate("D, d M Y H:i:s T");
             $dateCacheTime = $now;
         }
 
@@ -95,7 +95,7 @@ final class HttpResponseWriter
 
         $body = $response->getBody();
         if (! $hasContentLength && $body->getSize() !== null) {
-            $headerLines[] = "Content-Length: ".$body->getSize();
+            $headerLines[] = "Content-Length: " . $body->getSize();
         }
 
         if (! $hasServer) {
@@ -106,7 +106,7 @@ final class HttpResponseWriter
             $headerLines[] = $dateCache;
         }
 
-        return implode("\r\n", $headerLines)."\r\n";
+        return implode("\r\n", $headerLines) . "\r\n";
     }
 
     private function getResponseBody(ResponseInterface $response): string

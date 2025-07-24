@@ -9,8 +9,9 @@ use Generator;
 use Throwable;
 use venndev\vosaka\core\Future;
 use venndev\vosaka\core\Result;
-use venndev\vosaka\net\tcp\TCPListener;
-use venndev\vosaka\net\tcp\TCPStream;
+use venndev\vosaka\net\tcp\TCP;
+use venndev\vosaka\net\tcp\TCPConnection;
+use venndev\vosaka\net\tcp\TCPServer;
 use venndev\vosaka\VOsaka;
 use vosaka\http\middleware\MiddlewareInterface;
 use vosaka\http\middleware\MiddlewareStack;
@@ -18,7 +19,7 @@ use vosaka\http\router\Router;
 
 final class HttpServer
 {
-    private ?TCPListener $listener = null;
+    private ?TCPServer $listener = null;
     private bool $running = false;
     private Router $router;
     private MiddlewareStack $middlewareStack;
@@ -105,10 +106,11 @@ final class HttpServer
     public function serve(string $address, array $options = []): Result
     {
         $fn = function () use ($address, $options): Generator {
-            $this->listener = yield from TCPListener::bind(
+            $this->listener = yield from TCP::listen(
                 $address,
                 $options
             )->unwrap();
+
             $this->running = true;
 
             if ($this->debugMode) {
@@ -140,7 +142,7 @@ final class HttpServer
         $this->listener?->close();
     }
 
-    private function handleConnection(TCPStream $client): Generator
+    private function handleConnection(TCPConnection $client): Generator
     {
         try {
             $keepAlive = true;

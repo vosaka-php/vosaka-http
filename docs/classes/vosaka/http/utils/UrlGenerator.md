@@ -119,4 +119,4 @@ private buildUrl(string $pattern, array $params): string
 
 
 ***
-> Automatically generated on 2025-07-01
+> Automatically generated on 2025-07-24
