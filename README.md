@@ -81,3 +81,28 @@ echo $response->getStatusCode() . PHP_EOL;
 ```bash
 php tests/server.php
 ```
+
+# Benchmark
+```yml
+PHP ➜  ~ wrk -t12 -c1000 -d30s http://192.168.2.8:8888
+Running 30s test @ http://192.168.2.8:8888
+  12 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    74.85ms   13.03ms 248.39ms   82.83%
+    Req/Sec     1.11k   159.39     1.64k    76.43%
+  397881 requests in 30.10s, 162.02MB read
+Requests/sec:  13218.93
+Transfer/sec:      5.38MB
+
+
+NODEJS ➜  ~ wrk -t12 -c1000 -d30s http://192.168.2.8:8888
+Running 30s test @ http://192.168.2.8:8888
+  12 threads and 1000 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    85.24ms   28.84ms 870.27ms   94.57%
+    Req/Sec     0.98k   186.48     1.69k    74.64%
+  352045 requests in 30.10s, 230.99MB read
+  Socket errors: connect 0, read 0, write 1558, timeout 0
+Requests/sec:  11695.57
+Transfer/sec:      7.67MB
+```
