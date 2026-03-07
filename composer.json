@@ -16,6 +16,6 @@
   ],
   "require": {
     "psr/http-message": "^2.0",
-    "venndev/vosaka-fourotines": "^1.3"
+    "venndev/vosaka-fourotines": "^1.4"
   }
 }

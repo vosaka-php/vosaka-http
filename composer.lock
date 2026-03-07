@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "372bf35acd54c9b60a7856c61ac1f31c",
+    "content-hash": "01d2f2dffe043e52386cb5baec3f4526",
     "packages": [
         {
             "name": "laravel/serializable-closure",
@@ -187,16 +187,16 @@
         },
         {
             "name": "venndev/vosaka-fourotines",
-            "version": "1.3.9.1",
+            "version": "1.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/vosaka-php/vosaka-foroutines.git",
-                "reference": "d3b797653fad5a0547f7ba7816e8d72b63d52d2d"
+                "reference": "57f0dcd66351cc8963e8586730fbfbd0c78489ac"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vosaka-php/vosaka-foroutines/zipball/d3b797653fad5a0547f7ba7816e8d72b63d52d2d",
-                "reference": "d3b797653fad5a0547f7ba7816e8d72b63d52d2d",
+                "url": "https://api.github.com/repos/vosaka-php/vosaka-foroutines/zipball/57f0dcd66351cc8963e8586730fbfbd0c78489ac",
+                "reference": "57f0dcd66351cc8963e8586730fbfbd0c78489ac",
                 "shasum": ""
             },
             "require": {
@@ -248,9 +248,9 @@
             ],
             "support": {
                 "issues": "https://github.com/vosaka-php/vosaka-foroutines/issues",
-                "source": "https://github.com/vosaka-php/vosaka-foroutines/tree/1.3.9.1"
+                "source": "https://github.com/vosaka-php/vosaka-foroutines/tree/1.4.0"
             },
-            "time": "2026-03-07T21:46:45+00:00"
+            "time": "2026-03-07T22:24:11+00:00"
         }
     ],
     "packages-dev": [],
