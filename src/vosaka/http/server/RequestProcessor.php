@@ -4,130 +4,114 @@ declare(strict_types=1);
 
 namespace vosaka\http\server;
 
-use Generator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
+use vosaka\foroutines\Async;
 use vosaka\http\exceptions\HttpException;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
 use vosaka\http\middleware\MiddlewareStack;
 use vosaka\http\router\RouteDefinition;
-use vosaka\http\router\RouteMatch;
 use vosaka\http\router\Router;
 
+/**
+ * RequestProcessor — vosaka-foroutines (Fiber-based).
+ *
+ * Runs the middleware stack + router handler synchronously inside the
+ * caller's fiber. If a route handler returns an Async, it is awaited
+ * so handlers can do their own async I/O (DB queries, upstream calls, etc.)
+ * without blocking the event loop.
+ *
+ *   // Sync handler — works as-is
+ *   $router->get('/ping', fn($req) => Response::json(['pong' => true]));
+ *
+ *   // Async handler — also works
+ *   $router->get('/data', function ($req) {
+ *       $body = AsyncIO::httpGet('https://api.example.com/data')->await();
+ *       return Response::json(json_decode($body, true));
+ *   });
+ */
 final class RequestProcessor
 {
-    private Router $router;
-    private MiddlewareStack $middlewareStack;
-    private ErrorHandlerManager $errorHandlers;
-    private bool $debugMode;
-
     public function __construct(
-        Router $router,
-        MiddlewareStack $middlewareStack,
-        ErrorHandlerManager $errorHandlers,
-        bool $debugMode = false
-    ) {
-        $this->router = $router;
-        $this->middlewareStack = $middlewareStack;
-        $this->errorHandlers = $errorHandlers;
-        $this->debugMode = $debugMode;
-    }
+        private readonly Router             $router,
+        private readonly MiddlewareStack    $middlewareStack,
+        private readonly ErrorHandlerManager $errorHandlers,
+        private readonly bool               $debugMode = false,
+    ) {}
 
-    public function processRequest(
-        ServerRequestInterface $request
-    ): ResponseInterface {
+    // ── Public ───────────────────────────────────────────────────────────────
+
+    public function processRequest(ServerRequestInterface $request): ResponseInterface
+    {
         try {
-            $response = $this->middlewareStack->build(
-                fn(ServerRequestInterface $req) => $this->router->handle($req)
-            )($request);
+            $handler = fn(ServerRequestInterface $req) => $this->router->handle($req);
+            $result  = ($this->middlewareStack->build($handler))($request);
 
-            if ($response instanceof Generator) {
-                $finalResponse = null;
-                foreach ($response as $value) {
-                    $finalResponse = $value;
-                }
-                $response = $finalResponse;
-            }
-
-            return $response instanceof ResponseInterface
-                ? $response
-                : $this->convertToResponse($response);
+            return $this->resolveResult($result);
         } catch (HttpException $e) {
             if ($e->getCode() === 404) {
-                $allowedMethods = $this->findAllowedMethods($request);
-                if (!empty($allowedMethods)) {
-                    return $this->errorHandlers->handleMethodNotAllowed(
-                        $request,
-                        $allowedMethods
-                    );
+                $allowed = $this->findAllowedMethods($request);
+                if (!empty($allowed)) {
+                    return $this->errorHandlers->handleMethodNotAllowed($request, $allowed);
                 }
                 return $this->errorHandlers->handleNotFound($request);
             }
             return $this->errorHandlers->handleError($e, $request);
         } catch (Throwable $e) {
             if ($this->debugMode) {
-                echo "Unhandled error: {$e->getMessage()}\n";
-                echo "File: {$e->getFile()}:{$e->getLine()}\n";
+                echo "[RequestProcessor] {$e->getMessage()} @ {$e->getFile()}:{$e->getLine()}\n";
             }
             return $this->errorHandlers->handleError($e, $request);
         }
     }
 
-    private function findAllowedMethods(ServerRequestInterface $request): array
-    {
-        $allowedMethods = [];
-        $path = $request->getUri()->getPath();
+    // ── Private ──────────────────────────────────────────────────────────────
 
-        foreach ($this->router->getRoutes() as $route) {
-            /**
-             * @var RouteDefinition $route
-             */
-            if (preg_match($route->compiled->getRegex(), $path)) {
-                $allowedMethods[] = $route->method;
-            }
+    /**
+     * Resolve whatever the route handler returned into a ResponseInterface.
+     *
+     * Supported handler return types:
+     *   ResponseInterface  → returned as-is
+     *   Async              → awaited, then resolved recursively
+     *   string             → Response::text()
+     *   array | object     → Response::json()
+     *   mixed              → cast to string, wrapped in 200 text response
+     */
+    private function resolveResult(mixed $result): ResponseInterface
+    {
+        // Async handler — await it inside the current fiber
+        if ($result instanceof Async) {
+            return $this->resolveResult($result->wait());
         }
 
-        return array_unique($allowedMethods);
-    }
-
-    private function enrichRequestWithRouteData(
-        ServerRequestInterface $request,
-        RouteMatch $match
-    ): ServerRequestInterface {
-        // Add route parameters as attributes
-        foreach ($match->params as $key => $value) {
-            $request = $request->withAttribute($key, $value);
-        }
-
-        // Add route metadata
-        $request = $request->withAttribute("_route", $match->route);
-        $request = $request->withAttribute("_route_params", $match->params);
-        $request = $request->withAttribute("_route_name", $match->route->name);
-
-        return $request;
-    }
-
-    private function logRouteMatch(
-        ServerRequestInterface $request,
-        RouteMatch $match
-    ): void {
-        $method = $request->getMethod();
-        $path = $request->getUri()->getPath();
-        $pattern = $match->route->pattern;
-        $params = !empty($match->params) ? json_encode($match->params) : "none";
-
-        echo "Route matched: {$method} {$path} -> {$pattern} (params: {$params})\n";
-    }
-
-    private function convertToResponse(mixed $result): ResponseInterface
-    {
         return match (true) {
-            $result instanceof ResponseInterface => $result,
-            is_string($result) => Response::text($result),
+            $result instanceof ResponseInterface    => $result,
+            is_string($result)                      => Response::text($result),
             is_array($result) || is_object($result) => Response::json($result),
             default => new Response(200, [], Stream::create((string) $result)),
         };
+    }
+
+    /**
+     * Check which HTTP methods are registered for this path
+     * (used to return a proper 405 with an Allow header).
+     *
+     * @return string[]
+     */
+    private function findAllowedMethods(ServerRequestInterface $request): array
+    {
+        $path    = $request->getUri()->getPath();
+        $allowed = [];
+
+        foreach ($this->router->getRoutes() as $route) {
+            /** @var RouteDefinition $route */
+            if (preg_match($route->compiled->getRegex(), $path)) {
+                $allowed[] = $route->method;
+            }
+        }
+
+        return array_unique($allowed);
     }
 }

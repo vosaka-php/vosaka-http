@@ -4,25 +4,39 @@ declare(strict_types=1);
 
 namespace vosaka\http\server;
 
-use venndev\vosaka\core\Result;
-
 /**
- * Server builder for fluent configuration
+ * ServerBuilder — fluent builder for HttpServer.
+ *
+ * Usage:
+ *   $server->bind('0.0.0.0:8080')->serve();
+ *   $server->bind('0.0.0.0:8080')->withOptions([...])->serve();
  */
-class ServerBuilder
+final class ServerBuilder
 {
+    private array $options = [];
+
     public function __construct(
-        private HttpServer $server,
-        private string $address
+        private readonly HttpServer $server,
+        private readonly string     $address,
     ) {}
 
-    public function serve(): Result
+    /**
+     * Pass raw stream_socket_server context options.
+     * e.g. ['socket' => ['backlog' => 1024]]
+     */
+    public function withOptions(array $options): self
     {
-        return $this->server->serve($this->address);
+        $clone          = clone $this;
+        $clone->options = $options;
+        return $clone;
     }
 
-    public function with_config(Router $router, ServerConfig $config): self
+    /**
+     * Start the server — blocks inside RunBlocking until shutdown().
+     * Must be called from within main().
+     */
+    public function serve(): void
     {
-        return new self(new HttpServer($router, $config), $this->address);
+        $this->server->serve($this->address, $this->options);
     }
 }

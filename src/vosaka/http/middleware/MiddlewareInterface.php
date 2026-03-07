@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace vosaka\http\middleware;
 
-use Generator;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 

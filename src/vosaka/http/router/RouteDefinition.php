@@ -14,7 +14,8 @@ final class RouteDefinition
     public function __construct(
         public string $method,
         public string $pattern,
-        public Closure $handler,
+        /** @var Closure */
+        public $handler,
         public array $middleware,
         public CompiledRoute $compiled,
         public ?string $name = null

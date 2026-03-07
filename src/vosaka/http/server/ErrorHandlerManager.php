@@ -6,18 +6,21 @@ namespace vosaka\http\server;
 
 use Closure;
 use Throwable;
-use vosaka\http\message\Response;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use vosaka\http\message\Response;
 use vosaka\http\exceptions\HttpException;
 use vosaka\http\message\Stream;
 use vosaka\http\router\Router;
 
 final class ErrorHandlerManager
 {
-    private ?Closure $errorHandler = null;
-    private ?Closure $notFoundHandler = null;
-    private ?Closure $methodNotAllowedHandler = null;
+    /** @var Closure|null */
+    private $errorHandler = null;
+    /** @var Closure|null */
+    private $notFoundHandler = null;
+    /** @var Closure|null */
+    private $methodNotAllowedHandler = null;
     private Router $router;
     private bool $debugMode;
 
@@ -27,9 +30,7 @@ final class ErrorHandlerManager
         $this->debugMode = $debugMode;
         $this->errorHandler = $this->defaultErrorHandler(...);
         $this->notFoundHandler = $this->defaultNotFoundHandler(...);
-        $this->methodNotAllowedHandler = $this->defaultMethodNotAllowedHandler(
-            ...
-        );
+        $this->methodNotAllowedHandler = $this->defaultMethodNotAllowedHandler(...);
     }
 
     public function setErrorHandler(Closure $handler): void
@@ -150,8 +151,8 @@ final class ErrorHandlerManager
 
         $message =
             $statusCode === 500
-                ? "Internal Server Error"
-                : $error->getMessage();
+            ? "Internal Server Error"
+            : $error->getMessage();
         return new Response($statusCode, [], Stream::create($message));
     }
 }

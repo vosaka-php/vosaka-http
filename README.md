@@ -1,17 +1,15 @@
-# VOsaka HTTP Library
+# VOsaka HTTP
 
-A powerful asynchronous HTTP library for PHP built on top of the VOsaka async runtime system. This library provides both HTTP client and server capabilities with full PSR-7 compatibility.
+Asynchronous HTTP library for PHP with PSR-7 messages, router, middleware, HTTP client, and HTTP server.
 
 ## Features
 
-- **Asynchronous HTTP Client**: Make concurrent HTTP requests without blocking
-- **Asynchronous HTTP Server**: Handle multiple connections concurrently
-- **PSR-7 Compatible**: Full implementation of PSR-7 HTTP message interfaces
-- **Advanced Routing**: Parameter extraction, route groups, and middleware support
-- **Built-in Middleware**: CORS, rate limiting, and custom middleware support
-- **Stream Support**: Efficient handling of large payloads
-- **SSL/TLS Support**: Secure connections for both client and server
-- **Modern PHP**: Uses PHP 8+ features with strict typing
+- Async HTTP client (`Browzr`)
+- Async HTTP server (`HttpServer`)
+- PSR-7 message implementation
+- Router with path params
+- Middleware stack (CORS, favicon, custom middleware)
+- Strict types, PHP 8+
 
 ## Installation
 
@@ -19,149 +17,67 @@ A powerful asynchronous HTTP library for PHP built on top of the VOsaka async ru
 composer require venndev/vosaka-http
 ```
 
-## Quick Start
+## HTTP Server (Current Flow)
 
-### HTTP Client
+`HttpServer` now runs this pipeline:
 
-```php
-<?php
+`socket -> read -> string buffer -> HTTP parser -> handler -> response builder -> string -> socket write`
 
-require_once 'vendor/autoload.php';
+This is implemented in:
 
-use venndev\vosaka\VOsaka;
-use vosaka\http\Browzr;
+- [src/vosaka/http/server/HttpServer.php](src/vosaka/http/server/HttpServer.php)
 
-// Simple async function
-function makeRequests(): Generator
-{
-    // GET request
-    $response = yield from Browzr::get('https://api.example.com/users')->unwrap();
-    echo "Status: " . $response->getStatusCode() . "\n";
-    echo "Body: " . $response->getBody()->getContents() . "\n";
-
-    // POST request with JSON
-    $data = ['name' => 'John', 'email' => 'john@example.com'];
-    $response = yield from Browzr::post(
-        'https://api.example.com/users',
-        $data,
-        ['Content-Type' => 'application/json']
-    )->unwrap();
-
-    return $response;
-}
-
-// Run with VOsaka
-VOsaka::spawn(makeRequests());
-VOsaka::run();
-```
-
-### HTTP Server
+## Quick Start (Server)
 
 ```php
 <?php
-require "../vendor/autoload.php";
+
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
 
 use Psr\Http\Message\ServerRequestInterface;
-use venndev\vosaka\VOsaka;
 use vosaka\http\message\Response;
-use vosaka\http\server\Router;
 use vosaka\http\middleware\CorsMiddleware;
+use vosaka\http\router\Router;
 use vosaka\http\server\HttpServer;
+use vosaka\foroutines\AsyncMain;
 
-echo "=== HTTP Server Examples ===\n";
-
-$router = Router::new()
-    ->get(
-        "/users/{id:\d+}",
-        function (ServerRequestInterface $req) {
+#[AsyncMain]
+function main() {
+    $router = Router::new()
+        ->get('/health', function (ServerRequestInterface $req) {
             return Response::json([
-                "user_id" => $req->getAttribute("id"),
-                "message" => "User found with ID: " . $req->getAttribute("id"),
+                'status' => 'ok',
+                'time' => date('c'),
             ]);
-        },
-        "user.show" // Named route
-    )
-    ->get(
-        "/posts/{slug}",
-        function (ServerRequestInterface $req) {
-            return Response::json([
-                "post_slug" => $req->getAttribute("slug"),
-                "message" =>
-                    "Post found with slug: " . $req->getAttribute("slug"),
-            ]);
-        },
-        "post.show"
-    )
-    ->get(
-        "/",
-        function (ServerRequestInterface $req) {
-            return Response::json([
-                "message" => "Welcome to VOsaka HTTP API",
-                "version" => "2.0",
-                "routes" => [
-                    "GET /" => "This welcome message",
-                    "GET /users/{id}" => "Get user by ID (numeric only)",
-                    "GET /posts/{slug}" => "Get post by slug",
-                    "GET /health" => "Health check endpoint",
-                ],
-                "examples" => ["/users/123", "/posts/hello-world", "/health"],
-            ]);
-        },
-        "home"
-    )
-    ->get(
-        "/health",
-        function (ServerRequestInterface $req) {
-            return Response::json([
-                "status" => "healthy",
-                "timestamp" => date("c"),
-                "uptime" => "Server is running",
-            ]);
-        },
-        "health"
-    );
+        });
 
-$server = HttpServer::new($router)
-    ->withDebugMode(true)
-    ->layer(CorsMiddleware::permissive());
+    $server = HttpServer::new($router)
+        ->withDebugMode(true)
+        ->layer(CorsMiddleware::permissive());
 
-echo "Starting server on 0.0.0.0:8888...\n";
-
-VOsaka::spawn($server->serve("0.0.0.0:8888")->unwrap());
-VOsaka::run();
-
-```
-
-## Concurrent Requests
-
-```php
-function concurrentRequests(): Generator
-{
-    // Make multiple requests concurrently
-    $responses = yield from VOsaka::join(
-        Browzr::get('https://api1.example.com/data'),
-        Browzr::get('https://api2.example.com/data'),
-        Browzr::get('https://api3.example.com/data')
-    )->unwrap();
-
-    foreach ($responses as $i => $response) {
-        echo "Response $i: " . $response->getStatusCode() . "\n";
-    }
+    $server->serve('0.0.0.0:8888');
 }
 ```
 
-## Advanced Features
-
-### Custom HTTP Client
+## Quick Start (Client)
 
 ```php
-$client = Browzr::client([
-    'timeout' => 30,
-    'user_agent' => 'MyApp/1.0',
-    'headers' => [
-        'Authorization' => 'Bearer ' . $token
-    ]
-]);
+<?php
 
-$response = yield from $client->get('https://api.example.com/protected')->unwrap();
+declare(strict_types=1);
+
+require __DIR__ . '/vendor/autoload.php';
+
+use vosaka\http\Browzr;
+
+$response = Browzr::get('https://httpbin.org/get')->await();
+echo $response->getStatusCode() . PHP_EOL;
+```
+
+## Local Test
+
+```bash
+php tests/server.php
 ```

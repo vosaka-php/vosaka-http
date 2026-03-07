@@ -9,7 +9,6 @@ use Closure;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use vosaka\http\exceptions\HttpException;
-use vosaka\http\message\Response;
 use vosaka\http\message\ResponseConverter;
 use vosaka\http\middleware\MiddlewareInterface;
 use vosaka\http\middleware\MiddlewareStack;
@@ -233,14 +232,14 @@ final class Router
         $method = $request->getMethod();
         $path = $request->getUri()->getPath();
         $cacheKey = $method . ':' . $path;
-        
+
         // Check cache first - hot path
         if (isset($this->routeCache[$cacheKey])) {
             $match = $this->routeCache[$cacheKey];
         } else {
             $routes = $this->getRoutes($method);
             $match = $this->matcher->findMatch($routes, $request);
-            
+
             // Cache the result if we have a match
             if ($match !== null) {
                 if ($this->cacheSize >= self::MAX_CACHE_SIZE) {

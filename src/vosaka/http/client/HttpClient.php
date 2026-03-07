@@ -4,560 +4,498 @@ declare(strict_types=1);
 
 namespace vosaka\http\client;
 
-use Generator;
-use RuntimeException;
+use CurlHandle;
+use CurlMultiHandle;
 use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 use Psr\Http\Message\RequestInterface;
-use venndev\vosaka\core\Future;
-use venndev\vosaka\core\Result;
+use vosaka\foroutines\Async;
+use vosaka\foroutines\Launch;
+use vosaka\foroutines\Pause;
+use vosaka\foroutines\channel\Channel;
 use vosaka\http\message\Request;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
 
 /**
- * Asynchronous HTTP Client using cURL Multi with VOsaka runtime.
+ * Asynchronous HTTP Client — vosaka-foroutines (Fiber-based).
  *
- * This client provides async HTTP request capabilities using cURL Multi
- * handle for non-blocking operations. It supports GET, POST, PUT, DELETE 
- * and other HTTP methods with configurable timeouts, headers, and SSL options.
+ * Architecture: One shared driver fiber manages the cURL multi handle.
+ * Each request gets its own Channel(1) for result delivery.
+ * Callers suspend on channel->receive() — they never touch the multi handle.
+ *
+ *   enqueue(url)
+ *     ├─ curl_multi_add_handle(multiHandle, ch)
+ *     ├─ pendingChannels[(int)$ch] = Channel::new(1)
+ *     ├─ ensureDriverRunning()          (no-op if driver already live)
+ *     └─ return Async::new(fn => channel->receive())   ← suspends here
+ *
+ *   Driver fiber (1 global instance):
+ *     loop:
+ *       curl_multi_exec(multiHandle, $active)   // non-blocking, timeout=0
+ *       curl_multi_info_read → channel[id]->send(result)
+ *       if no pending → exit
+ *       Pause::new()                             // yield to scheduler
  */
 final class HttpClient
 {
+    // ── Defaults ─────────────────────────────────────────────────────────────
+
     private array $defaultOptions = [
-        "timeout" => 30,
-        "connect_timeout" => 10,
-        "follow_redirects" => true,
-        "max_redirects" => 5,
-        "ssl_verify" => false,
-        "ssl_ca_bundle" => null, // Path to CA bundle file
-        "ssl_cert" => null,      // Client certificate
-        "ssl_key" => null,       // Client key
-        "user_agent" => "VOsaka-HTTP/1.0",
-        "headers" => [],
-        "proxy" => null,
-        "cookies" => null,
+        'timeout'          => 30,
+        'connect_timeout'  => 10,
+        'follow_redirects' => true,
+        'max_redirects'    => 5,
+        'ssl_verify'       => false,
+        'ssl_ca_bundle'    => null,
+        'ssl_cert'         => null,
+        'ssl_key'          => null,
+        'user_agent'       => 'VOsaka-HTTP/2.0',
+        'headers'          => [],
+        'proxy'            => null,
+        'cookies'          => null,
     ];
 
-    private static mixed $multiHandle = null;
-    private static array $activeHandles = [];
+    // ── Shared state (all HttpClient instances share one multi handle) ────────
+
+    private static ?CurlMultiHandle $multiHandle   = null;
+
+    /**
+     * Map: (int)$curlHandle → Channel<Response|Throwable>
+     * Only the driver fiber writes to these channels.
+     * Only the corresponding waiter fiber reads from them.
+     *
+     * @var array<int, Channel>
+     */
+    private static array $pendingChannels = [];
+
+    /** True while the driver fiber is alive. */
+    private static bool $driverRunning = false;
+
+    // ── Constructor ──────────────────────────────────────────────────────────
 
     public function __construct(array $options = [])
     {
         $this->defaultOptions = array_merge($this->defaultOptions, $options);
 
-        // Auto-detect CA bundle if not specified and SSL verify is enabled
-        if (
-            $this->defaultOptions['ssl_verify'] &&
-            $this->defaultOptions['ssl_ca_bundle'] === null
-        ) {
-            $this->defaultOptions['ssl_ca_bundle'] = self::getDefaultCABundle();
+        if ($this->defaultOptions['ssl_verify'] && $this->defaultOptions['ssl_ca_bundle'] === null) {
+            $this->defaultOptions['ssl_ca_bundle'] = self::detectCABundle();
         }
 
-        // Initialize cURL multi handle if not exists
-        if (self::$multiHandle === null) {
-            self::$multiHandle = curl_multi_init();
-            if (self::$multiHandle === false) {
-                throw new RuntimeException("Failed to initialize cURL multi handle");
-            }
-        }
+        self::initMultiHandle();
     }
 
+    // ── Public request API ───────────────────────────────────────────────────
+
     /**
-     * Send an HTTP request asynchronously.
+     * Send any PSR-7 request asynchronously.
+     * Returns an Async that resolves to a Response.
+     *
+     * Usage:
+     *   $response = $client->send($request)->wait();
+     *   // or concurrently:
+     *   [$r1, $r2] = [$client->get($url1)->wait(), $client->get($url2)->wait()];
      */
-    public function send(RequestInterface $request, array $options = []): Result
+    public function send(RequestInterface $request, array $options = []): Async
     {
-        $fn = function () use ($request, $options): Generator {
-            $options = array_merge($this->defaultOptions, $options);
+        $options = array_merge($this->defaultOptions, $options);
+        $this->validateUri($request->getUri());
 
-            $uri = $request->getUri();
-            $this->validateUri($uri);
-
-            // Create cURL handle
-            $ch = curl_init();
-            if ($ch === false) {
-                throw new RuntimeException("Failed to initialize cURL handle");
-            }
-
-            try {
-                // Configure cURL options
-                $this->configureCurl($ch, $request, $options);
-
-                // Add to multi handle
-                $code = curl_multi_add_handle(self::$multiHandle, $ch);
-                if ($code !== CURLM_OK) {
-                    throw new RuntimeException("Failed to add cURL handle to multi handle");
-                }
-
-                // Store handle reference
-                $handleId = spl_object_id((object)$ch);
-                self::$activeHandles[$handleId] = $ch;
-
-                // Execute async request
-                $response = yield from $this->executeAsync($ch, $handleId);
-
-                return $response;
-            } finally {
-                // Cleanup
-                if (isset(self::$activeHandles[$handleId])) {
-                    curl_multi_remove_handle(self::$multiHandle, $ch);
-                    unset(self::$activeHandles[$handleId]);
-                }
-                curl_close($ch);
-            }
-        };
-
-        return Future::new($fn());
+        $ch = $this->buildCurlHandle($request, $options);
+        return self::enqueue($ch);
     }
 
-    /**
-     * Send a GET request.
-     */
-    public function get(
-        string $url,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $request = new Request("GET", $url, $headers);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Send a POST request.
-     */
-    public function post(
-        string $url,
-        mixed $body = null,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $stream = $this->prepareBody($body, $headers);
-        $request = new Request("POST", $url, $headers, $stream);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Send a PUT request.
-     */
-    public function put(
-        string $url,
-        mixed $body = null,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $stream = $this->prepareBody($body, $headers);
-        $request = new Request("PUT", $url, $headers, $stream);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Send a DELETE request.
-     */
-    public function delete(
-        string $url,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $request = new Request("DELETE", $url, $headers);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Send a PATCH request.
-     */
-    public function patch(
-        string $url,
-        mixed $body = null,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $stream = $this->prepareBody($body, $headers);
-        $request = new Request("PATCH", $url, $headers, $stream);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Send a HEAD request.
-     */
-    public function head(
-        string $url,
-        array $headers = [],
-        array $options = []
-    ): Result {
-        $request = new Request("HEAD", $url, $headers);
-        return $this->send($request, $options);
-    }
-
-    /**
-     * Get the default CA bundle path.
-     * Tries multiple common locations.
-     */
-    private static function getDefaultCABundle(): ?string
+    public function get(string $url, array $headers = [], array $options = []): Async
     {
-        // Common CA bundle locations
-        $possiblePaths = [
-            // Set by environment
-            getenv('SSL_CERT_FILE'),
-            getenv('CURL_CA_BUNDLE'),
-
-            // Common Linux/Unix paths
-            '/etc/ssl/certs/ca-certificates.crt',
-            '/etc/pki/tls/certs/ca-bundle.crt',
-            '/etc/ssl/ca-bundle.pem',
-            '/etc/ssl/cert.pem',
-            '/usr/local/share/certs/ca-root-nss.crt',
-            '/usr/share/ssl/certs/ca-bundle.crt',
-
-            // macOS
-            '/usr/local/etc/openssl/cert.pem',
-            '/usr/local/etc/openssl@1.1/cert.pem',
-            '/usr/local/etc/openssl@3/cert.pem',
-            '/opt/homebrew/etc/ca-certificates/cert.pem',
-
-            // Windows (with Git)
-            'C:\Program Files\Git\mingw64\ssl\certs\ca-bundle.crt',
-            'C:\Program Files (x86)\Git\mingw32\ssl\certs\ca-bundle.crt',
-
-            // PHP configuration
-            ini_get('curl.cainfo'),
-            ini_get('openssl.cafile'),
-        ];
-
-        // Check each possible path
-        foreach ($possiblePaths as $path) {
-            if ($path && file_exists($path) && is_readable($path)) {
-                return $path;
-            }
-        }
-
-        // Try to download if not found
-        return self::downloadCABundle();
+        return $this->send(new Request('GET', $url, $headers), $options);
     }
 
-    /**
-     * Download CA bundle from curl.se
-     */
-    private static function downloadCABundle(): ?string
+    public function post(string $url, mixed $body = null, array $headers = [], array $options = []): Async
     {
-        $cacheDir = sys_get_temp_dir() . '/vosaka-http';
-        $cacertPath = $cacheDir . '/cacert.pem';
+        $stream  = $this->prepareBody($body, $headers);
+        return $this->send(new Request('POST', $url, $headers, $stream), $options);
+    }
 
-        // Check if already downloaded and fresh (less than 30 days)
-        if (file_exists($cacertPath)) {
-            $age = time() - filemtime($cacertPath);
-            if ($age < 30 * 24 * 60 * 60) { // 30 days
-                return $cacertPath;
-            }
-        }
+    public function put(string $url, mixed $body = null, array $headers = [], array $options = []): Async
+    {
+        $stream = $this->prepareBody($body, $headers);
+        return $this->send(new Request('PUT', $url, $headers, $stream), $options);
+    }
 
-        // Create directory
-        if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0755, true);
-        }
+    public function patch(string $url, mixed $body = null, array $headers = [], array $options = []): Async
+    {
+        $stream = $this->prepareBody($body, $headers);
+        return $this->send(new Request('PATCH', $url, $headers, $stream), $options);
+    }
 
-        // Download using system curl or file_get_contents
-        $url = 'https://curl.se/ca/cacert.pem';
+    public function delete(string $url, array $headers = [], array $options = []): Async
+    {
+        return $this->send(new Request('DELETE', $url, $headers), $options);
+    }
 
-        // Try curl command first
-        if (PHP_OS_FAMILY !== 'Windows') {
-            $cmd = sprintf(
-                'curl -fsSL -o %s %s',
-                escapeshellarg($cacertPath),
-                escapeshellarg($url)
+    public function head(string $url, array $headers = [], array $options = []): Async
+    {
+        return $this->send(new Request('HEAD', $url, $headers), $options);
+    }
+
+    // ── Core: enqueue + driver ────────────────────────────────────────────────
+
+    /**
+     * Register a ready-configured cURL easy handle into the multi handle,
+     * attach a result Channel, and return an Async that suspends until done.
+     */
+    private static function enqueue(CurlHandle $ch): Async
+    {
+        $code = curl_multi_add_handle(self::$multiHandle, $ch);
+        if ($code !== CURLM_OK) {
+            curl_close($ch);
+            throw new RuntimeException(
+                'curl_multi_add_handle failed: ' . curl_multi_strerror($code)
             );
-            exec($cmd, $output, $result);
-            if ($result === 0 && file_exists($cacertPath)) {
-                return $cacertPath;
-            }
         }
 
-        // Fallback to file_get_contents
-        $context = stream_context_create([
-            'http' => ['timeout' => 30],
-            'ssl' => ['verify_peer' => false] // OK for downloading CA bundle
+        // One buffered slot — driver sends exactly once, waiter receives once.
+        $channel = Channel::new(capacity: 1);
+        self::$pendingChannels[(int) $ch] = $channel;
+
+        self::ensureDriverRunning();
+
+        // This Async suspends the caller's Fiber at channel->receive().
+        // It does NOT touch the multi handle — that's the driver's job.
+        //
+        // NOTE: Channel::receive() on an empty channel returns null immediately
+        // (non-blocking). We must poll until the driver delivers a real value.
+        return Async::new(static function () use ($channel, $ch): Response {
+            $result = null;
+            while ($result === null) {
+                $result = $channel->receive();
+                if ($result === null) {
+                    Pause::new(); // yield to scheduler, let driver run
+                }
+            }
+
+            // Driver always sends either a Response or a Throwable.
+            if ($result instanceof Throwable) {
+                throw $result;
+            }
+
+            return $result;
+        });
+    }
+
+    /**
+     * Launch the driver fiber if not already running.
+     * The driver is the sole owner of curl_multi_exec / curl_multi_info_read.
+     */
+    private static function ensureDriverRunning(): void
+    {
+        if (self::$driverRunning) {
+            return;
+        }
+
+        self::$driverRunning = true;
+
+        Launch::new(static function (): void {
+            try {
+                self::runDriver();
+            } finally {
+                // Guard: if driver exits with channels still pending (crash),
+                // send errors so waiters don't block forever.
+                foreach (self::$pendingChannels as $id => $channel) {
+                    $channel->send(new RuntimeException(
+                        "HTTP driver terminated unexpectedly (handle id: $id)"
+                    ));
+                }
+                self::$pendingChannels = [];
+                self::$driverRunning   = false;
+            }
+        });
+    }
+
+    /**
+     * The actual driver loop.
+     * Runs until all pending channels are delivered.
+     * Never blocks — uses Pause::new() to yield between ticks.
+     */
+    private static function runDriver(): void
+    {
+        while (!empty(self::$pendingChannels)) {
+            // Tick the multi handle — completely non-blocking.
+            $active = 0;
+            $status = curl_multi_exec(self::$multiHandle, $active);
+
+            if ($status !== CURLM_OK && $status !== CURLM_CALL_MULTI_PERFORM) {
+                // Multi handle is broken — fail all pending requests.
+                $error = curl_multi_strerror($status);
+                foreach (self::$pendingChannels as $channel) {
+                    $channel->send(new RuntimeException("curl_multi_exec: $error"));
+                }
+                self::$pendingChannels = [];
+                return;
+            }
+
+            // Harvest completed transfers.
+            // curl_multi_info_read dequeues from curl's internal result queue.
+            // Only the driver calls this — no race condition possible.
+            while ($info = curl_multi_info_read(self::$multiHandle)) {
+                $ch      = $info['handle'];
+                $id      = (int) $ch;
+                $channel = self::$pendingChannels[$id] ?? null;
+
+                if ($channel === null) {
+                    // Stale handle from a previous session — just clean up.
+                    curl_multi_remove_handle(self::$multiHandle, $ch);
+                    curl_close($ch);
+                    continue;
+                }
+
+                // Deliver result or error — waiter fiber will resume on next tick.
+                if ($info['result'] !== CURLE_OK) {
+                    $channel->send(new RuntimeException(
+                        'cURL request failed: ' . curl_error($ch)
+                            . ' (' . curl_strerror($info['result']) . ')'
+                    ));
+                } else {
+                    try {
+                        $channel->send(self::parseResponse($ch));
+                    } catch (Throwable $e) {
+                        $channel->send($e);
+                    }
+                }
+
+                curl_multi_remove_handle(self::$multiHandle, $ch);
+                curl_close($ch);
+                unset(self::$pendingChannels[$id]);
+            }
+
+            // Yield to the scheduler so waiter fibers (and other work) can run.
+            // This is the key difference from the original code — we never
+            // call curl_multi_select() with a blocking timeout.
+            Pause::new();
+        }
+    }
+
+    // ── cURL handle construction ─────────────────────────────────────────────
+
+    private function buildCurlHandle(RequestInterface $request, array $options): CurlHandle
+    {
+        $ch = curl_init();
+        if ($ch === false) {
+            throw new RuntimeException('curl_init() failed');
+        }
+
+        $uri = $request->getUri();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => (string) $uri,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER         => true,
+            CURLOPT_CUSTOMREQUEST  => $request->getMethod(),
+            CURLOPT_TIMEOUT        => $options['timeout'],
+            CURLOPT_CONNECTTIMEOUT => $options['connect_timeout'],
+            CURLOPT_FOLLOWLOCATION => $options['follow_redirects'],
+            CURLOPT_MAXREDIRS      => $options['max_redirects'],
+            CURLOPT_SSL_VERIFYPEER => $options['ssl_verify'],
+            CURLOPT_SSL_VERIFYHOST => $options['ssl_verify'] ? 2 : 0,
+            CURLOPT_USERAGENT      => $options['user_agent'],
         ]);
 
-        $content = @file_get_contents($url, false, $context);
-        if ($content !== false) {
-            file_put_contents($cacertPath, $content);
-            return $cacertPath;
+        if ($options['ssl_ca_bundle'] !== null) {
+            curl_setopt($ch, CURLOPT_CAINFO, $options['ssl_ca_bundle']);
+        }
+        if ($options['ssl_cert'] !== null) {
+            curl_setopt($ch, CURLOPT_SSLCERT, $options['ssl_cert']);
+        }
+        if ($options['ssl_key'] !== null) {
+            curl_setopt($ch, CURLOPT_SSLKEY, $options['ssl_key']);
+        }
+        if ($options['proxy'] !== null) {
+            curl_setopt($ch, CURLOPT_PROXY, $options['proxy']);
+        }
+        if ($options['cookies'] !== null) {
+            curl_setopt($ch, CURLOPT_COOKIE, $options['cookies']);
         }
 
-        return null;
-    }
-
-    /**
-     * Configure cURL handle with request options.
-     */
-    private function configureCurl(
-        mixed $ch,
-        RequestInterface $request,
-        array $options
-    ): void {
-        $uri = $request->getUri();
-        $url = (string)$uri;
-
-        // Basic options
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, true);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $request->getMethod());
-
-        // Timeouts
-        curl_setopt($ch, CURLOPT_TIMEOUT, $options["timeout"]);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $options["connect_timeout"]);
-
-        // Follow redirects
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, $options["follow_redirects"]);
-        curl_setopt($ch, CURLOPT_MAXREDIRS, $options["max_redirects"]);
-
-        // SSL options
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $options["ssl_verify"]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $options["ssl_verify"] ? 2 : 0);
-
-        // CA bundle
-        if ($options["ssl_ca_bundle"] !== null) {
-            curl_setopt($ch, CURLOPT_CAINFO, $options["ssl_ca_bundle"]);
-        }
-
-        // Client certificate
-        if ($options["ssl_cert"] !== null) {
-            curl_setopt($ch, CURLOPT_SSLCERT, $options["ssl_cert"]);
-        }
-
-        // Client key
-        if ($options["ssl_key"] !== null) {
-            curl_setopt($ch, CURLOPT_SSLKEY, $options["ssl_key"]);
-        }
-
-        // Headers
-        $headers = $this->buildHeaders($request, $options);
+        $headers = $this->buildHeaderLines($request, $options);
         if (!empty($headers)) {
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         }
 
-        // Body
         $body = $request->getBody();
         if ($body->getSize() > 0) {
             $body->rewind();
-            $bodyContent = $body->getContents();
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyContent);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body->getContents());
         }
 
-        // Proxy
-        if ($options["proxy"] !== null) {
-            curl_setopt($ch, CURLOPT_PROXY, $options["proxy"]);
-        }
-
-        // Cookies
-        if ($options["cookies"] !== null) {
-            curl_setopt($ch, CURLOPT_COOKIE, $options["cookies"]);
-        }
+        return $ch;
     }
 
-    /**
-     * Execute cURL request asynchronously.
-     */
-    private function executeAsync(mixed $ch): Generator
+    private function buildHeaderLines(RequestInterface $request, array $options): array
     {
-        $active = null;
+        $merged = array_merge(
+            ['Accept' => '*/*'],
+            $options['headers'],
+            $request->getHeaders(),
+        );
 
-        // Start execution
-        do {
-            $status = curl_multi_exec(self::$multiHandle, $active);
-            yield;
-        } while ($status === CURLM_CALL_MULTI_PERFORM);
+        $lines = [];
+        foreach ($merged as $name => $values) {
+            foreach ((array) $values as $value) {
+                $lines[] = "$name: $value";
+            }
+        }
+        return $lines;
+    }
 
-        if ($status !== CURLM_OK) {
-            throw new RuntimeException("cURL multi exec failed: " . curl_multi_strerror($status));
+    // ── Response parsing ─────────────────────────────────────────────────────
+
+    private static function parseResponse(CurlHandle $ch): Response
+    {
+        $raw = curl_multi_getcontent($ch);
+        if ($raw === false || $raw === null) {
+            throw new RuntimeException('curl_multi_getcontent() returned no data');
         }
 
-        // Wait for completion
-        while ($active && $status === CURLM_OK) {
-            yield;
+        $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $httpCode   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerRaw  = substr($raw, 0, $headerSize);
+        $bodyRaw    = substr($raw, $headerSize);
 
-            // Wait for activity
-            $select = curl_multi_select(self::$multiHandle, 0.1);
+        $headers         = [];
+        $reasonPhrase    = '';
+        $protocolVersion = '1.1';
 
-            if ($select === -1) {
+        foreach (explode("\r\n", trim($headerRaw)) as $i => $line) {
+            if ($i === 0) {
+                if (preg_match('/^HTTP\/(\d\.\d)\s+\d{3}\s*(.*)$/', $line, $m)) {
+                    $protocolVersion = $m[1];
+                    $reasonPhrase    = $m[2] ?? '';
+                }
                 continue;
             }
-
-            // Continue execution
-            do {
-                $status = curl_multi_exec(self::$multiHandle, $active);
-                yield;
-            } while ($status === CURLM_CALL_MULTI_PERFORM);
-        }
-
-        // Check for completed transfers
-        while ($info = curl_multi_info_read(self::$multiHandle)) {
-            if ($info['handle'] === $ch) {
-                if ($info['result'] !== CURLE_OK) {
-                    $error = curl_error($ch);
-                    throw new RuntimeException("cURL request failed: " . $error);
-                }
-
-                // Get response
-                $response = $this->parseResponse($ch);
-                return $response;
+            if ($line === '' || !str_contains($line, ':')) {
+                continue;
             }
+            [$name, $value] = explode(':', $line, 2);
+            $headers[trim($name)][] = trim($value);
         }
 
-        throw new RuntimeException("Request did not complete");
+        return new Response($httpCode, $headers, Stream::create($bodyRaw), $protocolVersion, $reasonPhrase);
     }
 
-    /**
-     * Parse cURL response into Response object.
-     */
-    private function parseResponse(mixed $ch): Response
-    {
-        $responseData = curl_multi_getcontent($ch);
-        if ($responseData === false) {
-            throw new RuntimeException("Failed to get cURL response content");
-        }
+    // ── Body preparation ─────────────────────────────────────────────────────
 
-        // Get response info
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-
-        // Split headers and body
-        $headerString = substr($responseData, 0, $headerSize);
-        $bodyString = substr($responseData, $headerSize);
-
-        // Parse headers
-        $headers = [];
-        $reasonPhrase = "";
-        $protocolVersion = "1.1";
-
-        $headerLines = explode("\r\n", trim($headerString));
-        foreach ($headerLines as $i => $line) {
-            if ($i === 0) {
-                // Status line
-                if (preg_match('/^HTTP\/(\d\.\d)\s+(\d{3})\s*(.*)$/', $line, $matches)) {
-                    $protocolVersion = $matches[1];
-                    $reasonPhrase = $matches[3] ?? "";
-                }
-            } elseif (!empty($line) && str_contains($line, ":")) {
-                // Header line
-                [$name, $value] = explode(":", $line, 2);
-                $name = trim($name);
-                $value = trim($value);
-
-                if (!isset($headers[$name])) {
-                    $headers[$name] = [];
-                }
-                $headers[$name][] = $value;
-            }
-        }
-
-        // Create response
-        $body = Stream::create($bodyString);
-
-        return new Response(
-            $httpCode,
-            $headers,
-            $body,
-            $protocolVersion,
-            $reasonPhrase
-        );
-    }
-
-    /**
-     * Build headers array for cURL.
-     */
-    private function buildHeaders(RequestInterface $request, array $options): array
-    {
-        $headers = [];
-
-        // Add default headers
-        $defaultHeaders = array_merge(
-            [
-                "User-Agent" => $options["user_agent"],
-                "Accept" => "*/*",
-            ],
-            $options["headers"]
-        );
-
-        // Merge with request headers
-        $allHeaders = array_merge($defaultHeaders, $request->getHeaders());
-
-        // Format for cURL
-        foreach ($allHeaders as $name => $values) {
-            foreach ((array)$values as $value) {
-                $headers[] = "$name: $value";
-            }
-        }
-
-        return $headers;
-    }
-
-    /**
-     * Prepare request body.
-     */
     private function prepareBody(mixed $body, array &$headers): Stream
     {
         if ($body === null) {
-            return Stream::create("");
+            return Stream::create('');
         }
-
         if (is_string($body)) {
             return Stream::create($body);
         }
-
         if (is_array($body)) {
-            $json = json_encode($body, JSON_THROW_ON_ERROR);
-            if (!isset($headers["Content-Type"])) {
-                $headers["Content-Type"] = "application/json";
-            }
-            return Stream::create($json);
+            $headers['Content-Type'] ??= 'application/json';
+            return Stream::create(json_encode($body, JSON_THROW_ON_ERROR));
         }
-
         if ($body instanceof Stream) {
             return $body;
         }
-
-        throw new InvalidArgumentException("Invalid body type");
+        throw new InvalidArgumentException('Unsupported body type: ' . get_debug_type($body));
     }
 
-    /**
-     * Validate URI.
-     */
-    private function validateUri($uri): void
+    // ── Validation ───────────────────────────────────────────────────────────
+
+    private function validateUri(mixed $uri): void
     {
         $scheme = $uri->getScheme();
-        if (!in_array($scheme, ["http", "https"], true)) {
-            throw new InvalidArgumentException(
-                "Only HTTP and HTTPS URLs are supported"
-            );
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new InvalidArgumentException("Unsupported scheme '$scheme' — only http/https allowed");
         }
-
-        if ($uri->getHost() === "") {
-            throw new InvalidArgumentException("URL must contain a host");
+        if ($uri->getHost() === '') {
+            throw new InvalidArgumentException('URL must include a host');
         }
     }
 
-    /**
-     * Cleanup mixeds on destruction.
-     */
-    public function __destruct()
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+
+    private static function initMultiHandle(): void
     {
-        // Clean up any remaining handles
-        foreach (self::$activeHandles as $ch) {
-            curl_multi_remove_handle(self::$multiHandle, $ch);
-            curl_close($ch);
+        if (self::$multiHandle !== null) {
+            return;
         }
+        $mh = curl_multi_init();
+        if ($mh === false) {
+            throw new RuntimeException('curl_multi_init() failed');
+        }
+        // Pipelining: 0=off, 1=HTTP/1 pipeline, 2=HTTP/2 multiplex
+        curl_multi_setopt($mh, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+        self::$multiHandle = $mh;
     }
 
     /**
-     * Close the multi handle (call this when shutting down).
+     * Call this on application shutdown to release the multi handle.
      */
     public static function shutdown(): void
     {
+        // Fail any still-pending channels gracefully
+        foreach (self::$pendingChannels as $channel) {
+            $channel->send(new RuntimeException('HttpClient::shutdown() called'));
+        }
+        self::$pendingChannels = [];
+        self::$driverRunning   = false;
+
         if (self::$multiHandle !== null) {
             curl_multi_close(self::$multiHandle);
             self::$multiHandle = null;
         }
-        self::$activeHandles = [];
+    }
+
+    // ── CA bundle detection ──────────────────────────────────────────────────
+
+    private static function detectCABundle(): ?string
+    {
+        $candidates = array_filter([
+            getenv('SSL_CERT_FILE')  ?: null,
+            getenv('CURL_CA_BUNDLE') ?: null,
+            ini_get('curl.cainfo')   ?: null,
+            ini_get('openssl.cafile') ?: null,
+            '/etc/ssl/certs/ca-certificates.crt',       // Debian/Ubuntu
+            '/etc/pki/tls/certs/ca-bundle.crt',         // RHEL/CentOS
+            '/etc/ssl/ca-bundle.pem',                    // OpenSUSE
+            '/etc/ssl/cert.pem',                         // Alpine
+            '/usr/local/etc/openssl@3/cert.pem',         // macOS Homebrew
+            '/opt/homebrew/etc/ca-certificates/cert.pem',
+        ]);
+
+        foreach ($candidates as $path) {
+            if ($path && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        return self::downloadCABundle();
+    }
+
+    private static function downloadCABundle(): ?string
+    {
+        $dir  = sys_get_temp_dir() . '/vosaka-http';
+        $path = $dir . '/cacert.pem';
+
+        if (file_exists($path) && (time() - filemtime($path)) < 30 * 86400) {
+            return $path;
+        }
+
+        @mkdir($dir, 0755, true);
+
+        $ctx     = stream_context_create(['ssl' => ['verify_peer' => false]]);
+        $content = @file_get_contents('https://curl.se/ca/cacert.pem', false, $ctx);
+
+        if ($content !== false) {
+            file_put_contents($path, $content);
+            return $path;
+        }
+
+        return null;
     }
 }

@@ -14,8 +14,14 @@
       "email": "hyplex9009@gmail.com"
     }
   ],
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../vosaka-fourotines"
+    }
+  ],
   "require": {
-    "venndev/v-osaka": "^1.3",
-    "psr/http-message": "^2.0"
+    "psr/http-message": "^2.0",
+    "venndev/vosaka-fourotines": "*@dev"
   }
 }

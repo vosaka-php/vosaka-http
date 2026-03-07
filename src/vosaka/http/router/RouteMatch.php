@@ -13,5 +13,6 @@ readonly class RouteMatch
         public RouteDefinition $route,
         public array $params
     ) {
+        // No additional logic needed, just store the route and params
     }
 }

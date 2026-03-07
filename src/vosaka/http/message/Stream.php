@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace vosaka\http\message;
 
-use Psr\Http\Message\StreamInterface;
 use Throwable;
 use RuntimeException;
 use InvalidArgumentException;
+use Psr\Http\Message\StreamInterface;
 
 /**
  * PSR-7 Stream implementation for HTTP messages.

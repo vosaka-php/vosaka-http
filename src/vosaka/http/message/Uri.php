@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace vosaka\http\message;
 
-use Psr\Http\Message\UriInterface;
-
 use InvalidArgumentException;
+use Psr\Http\Message\UriInterface;
 
 final class Uri implements UriInterface
 {
@@ -254,7 +253,7 @@ final class Uri implements UriInterface
                 ($component === PHP_URL_PATH
                     ? ":@\/"
                     : ($component === PHP_URL_QUERY ||
-                    $component === PHP_URL_FRAGMENT
+                        $component === PHP_URL_FRAGMENT
                         ? ":@\/\?"
                         : "")) .
                 "%]++|%(?![a-f0-9]{2}))/i",

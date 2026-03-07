@@ -2,22 +2,20 @@
 
 require_once "../vendor/autoload.php";
 
-use venndev\vosaka\VOsaka;
-use vosaka\http\Browzr;
-use vosaka\http\message\Response;
+use vosaka\foroutines\AsyncMain;
+use vosaka\foroutines\RunBlocking;
+use vosaka\http\client\HttpClient;
 
-$time = microtime(true);
-function main(): Generator
+#[AsyncMain]
+function main(): void
 {
-    /**
-     * @var Response $response
-     */
-    $response = yield from Browzr::get("https://jsonplaceholder.typicode.com/posts/1")->unwrap();
-    var_dump($response->getBody()->getContents());
+    $lastTime = microtime(true);
+    RunBlocking::new(function () {
+        $httpClient = new HttpClient();
+        $response = $httpClient->get("https://jsonplaceholder.typicode.com/posts/1")->await();
+        var_dump($response->getBody()->getContents());
+    });
+
+    $elapsedTime = microtime(true) - $lastTime;
+    echo "Elapsed time: " . $elapsedTime . " seconds\n";
 }
-
-VOsaka::spawn(main());
-VOsaka::run();
-
-$time = microtime(true) - $time;
-echo "" . $time . "";
