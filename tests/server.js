@@ -82,7 +82,7 @@ function faviconMiddleware(req, res, next) {
 // ─── Request handler (compose middlewares + router) ──────────────────────────
 
 function composeMiddlewares(middlewares, finalHandler) {
-    return function(req, res) {
+    return function (req, res) {
         let i = 0;
         function next() {
             if (i < middlewares.length) {
