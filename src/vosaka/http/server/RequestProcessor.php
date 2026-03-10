@@ -7,7 +7,8 @@ namespace vosaka\http\server;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
-use vosaka\foroutines\Async;
+use vosaka\foroutines\Deferred;
+use vosaka\foroutines\LazyDeferred;
 use vosaka\http\exceptions\HttpException;
 use vosaka\http\message\Response;
 use vosaka\http\message\Stream;
@@ -19,7 +20,7 @@ use vosaka\http\router\Router;
  * RequestProcessor — vosaka-foroutines (Fiber-based).
  *
  * Runs the middleware stack + router handler synchronously inside the
- * caller's fiber. If a route handler returns an Async, it is awaited
+ * caller's fiber. If a route handler returns a Deferred or LazyDeferred, it is awaited
  * so handlers can do their own async I/O (DB queries, upstream calls, etc.)
  * without blocking the event loop.
  *
@@ -74,7 +75,7 @@ final class RequestProcessor
      *
      * Supported handler return types:
      *   ResponseInterface  → returned as-is
-     *   Async              → awaited, then resolved recursively
+     *   Deferred/LazyDeferred  → awaited, then resolved recursively
      *   string             → Response::text()
      *   array | object     → Response::json()
      *   mixed              → cast to string, wrapped in 200 text response
@@ -82,8 +83,8 @@ final class RequestProcessor
     private function resolveResult(mixed $result): ResponseInterface
     {
         // Async handler — await it inside the current fiber
-        if ($result instanceof Async) {
-            return $this->resolveResult($result->wait());
+        if ($result instanceof Deferred || $result instanceof LazyDeferred) {
+            return $this->resolveResult($result->await());
         }
 
         return match (true) {

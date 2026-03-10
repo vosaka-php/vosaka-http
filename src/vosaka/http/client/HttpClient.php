@@ -10,7 +10,8 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use Psr\Http\Message\RequestInterface;
-use vosaka\foroutines\Async;
+use vosaka\foroutines\Deferred;
+use vosaka\foroutines\LazyDeferred;
 use vosaka\foroutines\Launch;
 use vosaka\foroutines\Pause;
 use vosaka\foroutines\channel\Channel;
@@ -29,7 +30,7 @@ use vosaka\http\message\Stream;
  *     ├─ curl_multi_add_handle(multiHandle, ch)
  *     ├─ pendingChannels[(int)$ch] = Channel::new(1)
  *     ├─ ensureDriverRunning()          (no-op if driver already live)
- *     └─ return Async::new(fn => channel->receive())   ← suspends here
+ *     └─ return LazyDeferred::new(fn => channel->receive())   ← suspends here
  *
  *   Driver fiber (1 global instance):
  *     loop:
@@ -90,14 +91,14 @@ final class HttpClient
 
     /**
      * Send any PSR-7 request asynchronously.
-     * Returns an Async that resolves to a Response.
+     * Returns a Deferred that resolves to a Response.
      *
      * Usage:
-     *   $response = $client->send($request)->wait();
+     *   $response = $client->send($request)->await();
      *   // or concurrently:
-     *   [$r1, $r2] = [$client->get($url1)->wait(), $client->get($url2)->wait()];
+     *   [$r1, $r2] = [$client->get($url1)->await(), $client->get($url2)->await()];
      */
-    public function send(RequestInterface $request, array $options = []): Async
+    public function send(RequestInterface $request, array $options = []): Deferred
     {
         $options = array_merge($this->defaultOptions, $options);
         $this->validateUri($request->getUri());
@@ -106,35 +107,35 @@ final class HttpClient
         return self::enqueue($ch);
     }
 
-    public function get(string $url, array $headers = [], array $options = []): Async
+    public function get(string $url, array $headers = [], array $options = []): Deferred
     {
         return $this->send(new Request('GET', $url, $headers), $options);
     }
 
-    public function post(string $url, mixed $body = null, array $headers = [], array $options = []): Async
+    public function post(string $url, mixed $body = null, array $headers = [], array $options = []): Deferred
     {
         $stream  = $this->prepareBody($body, $headers);
         return $this->send(new Request('POST', $url, $headers, $stream), $options);
     }
 
-    public function put(string $url, mixed $body = null, array $headers = [], array $options = []): Async
+    public function put(string $url, mixed $body = null, array $headers = [], array $options = []): Deferred
     {
         $stream = $this->prepareBody($body, $headers);
         return $this->send(new Request('PUT', $url, $headers, $stream), $options);
     }
 
-    public function patch(string $url, mixed $body = null, array $headers = [], array $options = []): Async
+    public function patch(string $url, mixed $body = null, array $headers = [], array $options = []): Deferred
     {
         $stream = $this->prepareBody($body, $headers);
         return $this->send(new Request('PATCH', $url, $headers, $stream), $options);
     }
 
-    public function delete(string $url, array $headers = [], array $options = []): Async
+    public function delete(string $url, array $headers = [], array $options = []): Deferred
     {
         return $this->send(new Request('DELETE', $url, $headers), $options);
     }
 
-    public function head(string $url, array $headers = [], array $options = []): Async
+    public function head(string $url, array $headers = [], array $options = []): Deferred
     {
         return $this->send(new Request('HEAD', $url, $headers), $options);
     }
@@ -143,9 +144,9 @@ final class HttpClient
 
     /**
      * Register a ready-configured cURL easy handle into the multi handle,
-     * attach a result Channel, and return an Async that suspends until done.
+     * attach a result Channel, and return a LazyDeferred that suspends until done.
      */
-    private static function enqueue(CurlHandle $ch): Async
+    private static function enqueue(CurlHandle $ch): LazyDeferred
     {
         $code = curl_multi_add_handle(self::$multiHandle, $ch);
         if ($code !== CURLM_OK) {
@@ -161,12 +162,12 @@ final class HttpClient
 
         self::ensureDriverRunning();
 
-        // This Async suspends the caller's Fiber at channel->receive().
+        // This LazyDeferred suspends the caller's Fiber at channel->receive() when awaited.
         // It does NOT touch the multi handle — that's the driver's job.
         //
         // NOTE: Channel::receive() on an empty channel returns null immediately
         // (non-blocking). We must poll until the driver delivers a real value.
-        return Async::new(static function () use ($channel, $ch): Response {
+        return new LazyDeferred(static function () use ($channel, $ch): Response {
             $result = null;
             while ($result === null) {
                 $result = $channel->receive();

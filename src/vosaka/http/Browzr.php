@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace vosaka\http;
 
 use Psr\Http\Message\RequestInterface;
-use vosaka\foroutines\Async;
+use vosaka\foroutines\Deferred;
 use vosaka\http\client\HttpClient;
 use vosaka\http\message\Request;
 use vosaka\http\message\Response;
@@ -19,16 +19,16 @@ use vosaka\http\server\ServerConfig;
 /**
  * Browzr — Main facade for the VOsaka HTTP library (foroutines edition).
  *
- * Client methods return Async — call ->wait() to await the result inside
- * a fiber, or pass the Async to concurrent patterns:
+ * Client methods return Deferred — call ->await() to await the result inside
+ * a fiber, or pass the Deferred to concurrent patterns:
  *
  *   // Sequential
- *   $res = Browzr::get('https://api.example.com/users')->wait();
+ *   $res = Browzr::get('https://api.example.com/users')->await();
  *
  *   // Concurrent — both requests run in parallel
  *   $a1 = Browzr::get('https://api.example.com/users');
  *   $a2 = Browzr::get('https://api.example.com/posts');
- *   [$users, $posts] = [$a1->wait(), $a2->wait()];
+ *   [$users, $posts] = [$a1->await(), $a2->await()];
  *
  * Server:
  *   main(function () {
@@ -61,13 +61,13 @@ final class Browzr
         self::$defaultClient = null;
     }
 
-    // ── HTTP client methods (return Async<Response>) ─────────────────────────
+    // ── HTTP client methods (return Deferred<Response>) ─────────────────────────
 
     public static function get(
         string $url,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->get($url, $headers, $options);
     }
 
@@ -76,7 +76,7 @@ final class Browzr
         mixed  $body    = null,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->post($url, $body, $headers, $options);
     }
 
@@ -85,7 +85,7 @@ final class Browzr
         mixed  $body    = null,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->put($url, $body, $headers, $options);
     }
 
@@ -94,7 +94,7 @@ final class Browzr
         mixed  $body    = null,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->patch($url, $body, $headers, $options);
     }
 
@@ -102,7 +102,7 @@ final class Browzr
         string $url,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->delete($url, $headers, $options);
     }
 
@@ -110,14 +110,14 @@ final class Browzr
         string $url,
         array  $headers = [],
         array  $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->head($url, $headers, $options);
     }
 
     public static function send(
         RequestInterface $request,
         array            $options = [],
-    ): Async {
+    ): Deferred {
         return self::getDefaultClient()->send($request, $options);
     }
 
