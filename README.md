@@ -84,6 +84,8 @@ php tests/server.php
 
 # Benchmark
 ```yml
+OS: Linux 5.4.0-1026-aws #1 SMP Debian 5.4.19-1~deb10u1 (2026-03-13)
+
 PHP > wrk -t12 -c10000 -d30s http://127.0.0.1:8888
 Running 30s test @ http://127.0.0.1:8888
   12 threads and 10000 connections
