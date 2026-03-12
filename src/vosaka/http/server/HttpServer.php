@@ -11,6 +11,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use vosaka\foroutines\Launch;
 use vosaka\foroutines\Pause;
 use vosaka\foroutines\RunBlocking;
+use vosaka\foroutines\supervisor\{Supervisor, RestartStrategy};
 use vosaka\http\middleware\MiddlewareInterface;
 use vosaka\http\middleware\MiddlewareStack;
 use vosaka\http\router\Router;
@@ -99,6 +100,8 @@ final class HttpServer {
 		$this->listener = $this->createServerSocket($address, $options);
 		$this->running  = true;
 
+		$this->increaseFileDescriptorLimit();
+
 		Pause::setBatchSize(0);
 
 		if ($this->debugMode) {
@@ -107,7 +110,11 @@ final class HttpServer {
 		}
 
 		RunBlocking::new(function (): void {
-			$this->acceptLoop();
+			Supervisor::new(RestartStrategy::ONE_FOR_ONE)
+				->child(function (): void {
+					$this->acceptLoop();
+				})
+				->start();
 		});
 	}
 
@@ -343,5 +350,21 @@ final class HttpServer {
 
 		stream_set_blocking($socket, false);
 		return $socket;
+	}
+
+	private function increaseFileDescriptorLimit(): void {
+		if (!function_exists('posix_setrlimit')) {
+			return;
+		}
+
+		$limit   = 65535;
+		$current = posix_getrlimit();
+
+		if ($current && isset($current['soft openfiles']) && $current['soft openfiles'] < $limit) {
+			$success = @posix_setrlimit(POSIX_RLIMIT_NOFILE, $limit, $limit);
+			if ($success && $this->debugMode) {
+				echo "Increased file descriptor limit to {$limit}\n";
+			}
+		}
 	}
 }
