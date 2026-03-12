@@ -84,7 +84,7 @@ php tests/server.php
 
 # Benchmark
 ```yml
-PHP  wrk -t12 -c10000 -d30s http://127.0.0.1:8888
+PHP > wrk -t12 -c10000 -d30s http://127.0.0.1:8888
 Running 30s test @ http://127.0.0.1:8888
   12 threads and 10000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
@@ -94,7 +94,7 @@ Running 30s test @ http://127.0.0.1:8888
 Requests/sec:  23758.13
 Transfer/sec:      9.43MB
 
- NODEJS  wrk -t12 -c10000 -d30s http://127.0.0.1:8888
+NODEJS > wrk -t12 -c10000 -d30s http://127.0.0.1:8888
 Running 30s test @ http://127.0.0.1:8888
   12 threads and 10000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
