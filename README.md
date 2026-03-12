@@ -84,25 +84,24 @@ php tests/server.php
 
 # Benchmark
 ```yml
-PHP ➜  ~ wrk -t12 -c1000 -d30s http://192.168.2.8:8888
-Running 30s test @ http://192.168.2.8:8888
-  12 threads and 1000 connections
+PHP  wrk -t12 -c10000 -d30s http://127.0.0.1:8888
+Running 30s test @ http://127.0.0.1:8888
+  12 threads and 10000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    74.85ms   13.03ms 248.39ms   82.83%
-    Req/Sec     1.11k   159.39     1.64k    76.43%
-  397881 requests in 30.10s, 162.02MB read
-Requests/sec:  13218.93
-Transfer/sec:      5.38MB
+    Latency   416.48ms   38.54ms 742.26ms   95.75%
+    Req/Sec     2.00k   719.10     4.31k    68.44%
+  714611 requests in 30.08s, 283.51MB read
+Requests/sec:  23758.13
+Transfer/sec:      9.43MB
 
-
-NODEJS ➜  ~ wrk -t12 -c1000 -d30s http://192.168.2.8:8888
-Running 30s test @ http://192.168.2.8:8888
-  12 threads and 1000 connections
+ NODEJS  wrk -t12 -c10000 -d30s http://127.0.0.1:8888
+Running 30s test @ http://127.0.0.1:8888
+  12 threads and 10000 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    85.24ms   28.84ms 870.27ms   94.57%
-    Req/Sec     0.98k   186.48     1.69k    74.64%
-  352045 requests in 30.10s, 230.99MB read
-  Socket errors: connect 0, read 0, write 1558, timeout 0
-Requests/sec:  11695.57
-Transfer/sec:      7.67MB
+    Latency    39.46ms   14.92ms   1.98s    99.86%
+    Req/Sec     2.87k     1.73k    7.65k    60.89%
+  1027131 requests in 30.08s, 673.93MB read
+  Socket errors: connect 0, read 509, write 0, timeout 719
+Requests/sec:  34147.09
+Transfer/sec:     22.40MB
 ```
