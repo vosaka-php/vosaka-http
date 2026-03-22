@@ -184,7 +184,10 @@ final class Router
         $originalPrefix = $this->prefix;
         $originalMiddleware = $this->globalMiddleware;
 
-        $this->prefix = $this->prefix . rtrim($prefix, "/");
+        $parentPrefix = rtrim($this->prefix, "/");
+        $childPrefix = "/" . ltrim($prefix, "/");
+        $this->prefix = $parentPrefix . rtrim($childPrefix, "/");
+        
         $this->globalMiddleware = [...$this->globalMiddleware, ...$middleware];
 
         // Create RouteGroup for fluent API

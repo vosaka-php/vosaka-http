@@ -11,6 +11,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use vosaka\foroutines\Launch;
 use vosaka\foroutines\Pause;
 use vosaka\foroutines\RunBlocking;
+use vosaka\foroutines\Thread;
 use vosaka\foroutines\supervisor\{Supervisor, RestartStrategy};
 use vosaka\http\middleware\MiddlewareInterface;
 use vosaka\http\middleware\MiddlewareStack;
@@ -154,7 +155,7 @@ final class HttpServer {
 				}
 			}
 
-			Pause::new();
+			Pause::force();
 		}
 	}
 

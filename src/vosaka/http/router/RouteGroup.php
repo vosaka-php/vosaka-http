@@ -23,7 +23,7 @@ class RouteGroup
         Closure $handler,
         ?string $name = null
     ): self {
-        $this->router->get($this->prefix . $pattern, $handler, $name);
+        $this->router->get($pattern, $handler, $name);
         return $this;
     }
 
@@ -32,7 +32,7 @@ class RouteGroup
         Closure $handler,
         ?string $name = null
     ): self {
-        $this->router->post($this->prefix . $pattern, $handler, $name);
+        $this->router->post($pattern, $handler, $name);
         return $this;
     }
 
@@ -41,7 +41,7 @@ class RouteGroup
         Closure $handler,
         ?string $name = null
     ): self {
-        $this->router->put($this->prefix . $pattern, $handler, $name);
+        $this->router->put($pattern, $handler, $name);
         return $this;
     }
 
@@ -50,7 +50,7 @@ class RouteGroup
         Closure $handler,
         ?string $name = null
     ): self {
-        $this->router->delete($this->prefix . $pattern, $handler, $name);
+        $this->router->delete($pattern, $handler, $name);
         return $this;
     }
 
@@ -59,7 +59,7 @@ class RouteGroup
         Closure $handler,
         ?string $name = null
     ): self {
-        $this->router->patch($this->prefix . $pattern, $handler, $name);
+        $this->router->patch($pattern, $handler, $name);
         return $this;
     }
 
@@ -74,7 +74,7 @@ class RouteGroup
         Closure $callback,
         array $middleware = []
     ): self {
-        $this->router->group($this->prefix . $prefix, $callback, $middleware);
+        $this->router->group($prefix, $callback, $middleware);
         return $this;
     }
 }

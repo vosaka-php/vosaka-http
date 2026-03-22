@@ -162,17 +162,20 @@ final class HttpClient
 
         self::ensureDriverRunning();
 
-        // This LazyDeferred suspends the caller's Fiber at channel->receive() when awaited.
+        // This LazyDeferred suspends the caller's Fiber at Pause::force() when awaited.
         // It does NOT touch the multi handle — that's the driver's job.
         //
-        // NOTE: Channel::receive() on an empty channel returns null immediately
-        // (non-blocking). We must poll until the driver delivers a real value.
+        // NOTE: We use tryReceive() + Pause::force() instead of receive()
+        // to avoid being prematurely resumed by the scheduler's blind tick.
+        // If we used receive(), the scheduler would resume us with null,
+        // and if the driver then resumed us with the real Response at
+        // the wrong suspension point (Pause::force), the response would be lost.
         return new LazyDeferred(static function () use ($channel, $ch): Response {
             $result = null;
             while ($result === null) {
-                $result = $channel->receive();
+                $result = $channel->tryReceive();
                 if ($result === null) {
-                    Pause::new(); // yield to scheduler, let driver run
+                    Pause::force(); // yield to scheduler, let driver run
                 }
             }
 
@@ -237,21 +240,17 @@ final class HttpClient
             }
 
             // Harvest completed transfers.
-            // curl_multi_info_read dequeues from curl's internal result queue.
-            // Only the driver calls this — no race condition possible.
             while ($info = curl_multi_info_read(self::$multiHandle)) {
                 $ch      = $info['handle'];
                 $id      = (int) $ch;
                 $channel = self::$pendingChannels[$id] ?? null;
 
                 if ($channel === null) {
-                    // Stale handle from a previous session — just clean up.
                     curl_multi_remove_handle(self::$multiHandle, $ch);
                     curl_close($ch);
                     continue;
                 }
 
-                // Deliver result or error — waiter fiber will resume on next tick.
                 if ($info['result'] !== CURLE_OK) {
                     $channel->send(new RuntimeException(
                         'cURL request failed: ' . curl_error($ch)
@@ -270,10 +269,9 @@ final class HttpClient
                 unset(self::$pendingChannels[$id]);
             }
 
-            // Yield to the scheduler so waiter fibers (and other work) can run.
-            // This is the key difference from the original code — we never
-            // call curl_multi_select() with a blocking timeout.
-            Pause::new();
+            // Yield to the scheduler so waiter fibers can run.
+            // Using Pause::force() to guarantee a yield even if batching is enabled.
+            Pause::force();
         }
     }
 
